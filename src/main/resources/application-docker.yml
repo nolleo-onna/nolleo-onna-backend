@@ -1,0 +1,16 @@
+# Docker 환경 전용 프로파일 — docker-compose로 실행 시 SPRING_PROFILES_ACTIVE=docker 로 활성화됨.
+# DB/Redis 접속 정보는 docker-compose.yml의 environment에서 주입.
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
+  endpoint:
+    health:
+      show-details: always
