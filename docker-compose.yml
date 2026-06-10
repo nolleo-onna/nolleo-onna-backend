@@ -1,0 +1,61 @@
+services:
+
+  # ── PostgreSQL + PostGIS ────────────────────────────────────────────────────
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: onna-postgres
+    environment:
+      POSTGRES_DB: onna
+      POSTGRES_USER: onna
+      POSTGRES_PASSWORD: onna
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U onna -d onna" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: onna-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot App ─────────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: onna-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_URL: jdbc:postgresql://postgres:5432/onna
+      DB_USERNAME: onna
+      DB_PASSWORD: onna
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET}
+      KAKAO_CLIENT_ID: ${KAKAO_CLIENT_ID}
+      KAKAO_CLIENT_SECRET: ${KAKAO_CLIENT_SECRET}
+      NAVER_CLIENT_ID: ${NAVER_CLIENT_ID}
+      NAVER_CLIENT_SECRET: ${NAVER_CLIENT_SECRET}
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:
+  redis_data:
