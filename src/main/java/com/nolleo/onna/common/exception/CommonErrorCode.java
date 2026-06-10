@@ -13,7 +13,9 @@ public enum CommonErrorCode implements ErrorCode {
     INVALID_INPUT_VALUE(400,"INVALID_REQUEST","@Valid 형식 에러"),
     METHOD_NOT_ALLOWED(405, "METHOD_NOT_ALLOWED", "허용되지 않는 METHOD 입니다"),
     NO_HANDLER_FOUND(404, "NO_HANDLER_FOUND", "존재하지 않는 URL입니다"),
-    METHOD_TYPE_MISMATCH(400, "METHOD_TYPE_MISMATCH", "타입이 일치하지 않습니다");
+    METHOD_TYPE_MISMATCH(400, "METHOD_TYPE_MISMATCH", "타입이 일치하지 않습니다"),
+    UNAUTHORIZED(401, "UNAUTHORIZED", "인증이 필요합니다"),
+    FORBIDDEN(403, "FORBIDDEN", "접근 권한이 없습니다");
 
     private final int status;
     private final String errorCode;
