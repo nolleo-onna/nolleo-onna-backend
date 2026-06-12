@@ -10,7 +10,8 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, info
+        # SecurityConfig는 /actuator/health만 permitAll → expose도 health로 한정(info는 인증 필요라 노출해도 401).
+        include: health
   endpoint:
     health:
       show-details: always

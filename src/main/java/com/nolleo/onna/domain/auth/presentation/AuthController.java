@@ -8,7 +8,7 @@ import com.nolleo.onna.common.security.jwt.JwtProperties;
 import com.nolleo.onna.domain.auth.application.AuthService;
 import com.nolleo.onna.domain.auth.domain.exception.AuthErrorCode;
 import com.nolleo.onna.domain.auth.domain.model.AuthTokens;
-import com.nolleo.onna.domain.auth.presentation.dto.MeResponse;
+import com.nolleo.onna.domain.auth.presentation.dto.GetUserResponse;
 import com.nolleo.onna.domain.user.application.UserService;
 import com.nolleo.onna.domain.user.domain.model.User;
 import lombok.RequiredArgsConstructor;
@@ -61,8 +61,8 @@ public class AuthController {
 
     // 내 정보: HttpOnly라 프론트가 디코드 못 하므로 서버에서 조회해 전달.
     @GetMapping("/me")
-    public ResponseEntity<ApiResponseDto<MeResponse>> me(@AuthenticationPrincipal AuthPrincipal principal) {
+    public ResponseEntity<ApiResponseDto<GetUserResponse>> me(@AuthenticationPrincipal AuthPrincipal principal) {
         User user = userService.getById(principal.userId());
-        return ApiResponseDto.success(200, "유저 정보 조회 성공", MeResponse.from(user));
+        return ApiResponseDto.success(200, "유저 정보 조회 성공", GetUserResponse.from(user));
     }
 }

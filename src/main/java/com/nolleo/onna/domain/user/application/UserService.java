@@ -42,6 +42,8 @@ public class UserService {
         UserEntity entity = userJpaRepository.findByExternalIdAndProvider(externalId, provider)
                 .orElseThrow( () -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
         validateActiveUser(entity);
+        // ON CONFLICT로 내 INSERT가 무시되고 동시 로그인한 다른 요청이 넣은 row를 re-fetch한 경우,
+        // 이번 로그인의 최신 프로필로 보정. 경합 없는 일반 케이스에선 값이 같아 더티 체킹상 no-op.
         entity.updateProfile(nickname, profileImageUrl);
         return entity;
     }
