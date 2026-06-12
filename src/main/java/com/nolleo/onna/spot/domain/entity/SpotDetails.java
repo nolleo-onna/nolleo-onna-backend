@@ -59,37 +59,4 @@ public class SpotDetails {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    public static SpotDetails create(String contentId) {
-        SpotDetails details = new SpotDetails();
-        details.contentId = contentId;
-        details.updatedAt = OffsetDateTime.now();
-        return details;
-    }
-
-    public void update(
-            String tel,
-            String telName,
-            String homepage,
-            String addr1,
-            String addr2,
-            String zipcode,
-            String overview,
-            String overviewHash,
-            String intro,
-            Boolean parkingAvailable,
-            OffsetDateTime sourceCreatedAt
-    ) {
-        this.tel = tel;
-        this.telName = telName;
-        this.homepage = homepage;
-        this.addr1 = addr1;
-        this.addr2 = addr2;
-        this.zipcode = zipcode;
-        this.overview = overview;
-        this.overviewHash = overviewHash;
-        this.intro = intro;
-        this.parkingAvailable = parkingAvailable;
-        this.sourceCreatedAt = sourceCreatedAt;
-        this.updatedAt = OffsetDateTime.now();
-    }
 }

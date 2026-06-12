@@ -41,21 +41,4 @@ public class SpotImages {
     @Column(name = "serial_num", length = 20, nullable = false)
     private String serialNum;
 
-    public static SpotImages create(
-            String contentId,
-            String originImgUrl,
-            String smallImgUrl,
-            String imgName,
-            String cpyrhtDivCd,
-            String serialNum
-    ) {
-        SpotImages image = new SpotImages();
-        image.contentId = contentId;
-        image.originImgUrl = originImgUrl;
-        image.smallImgUrl = smallImgUrl;
-        image.imgName = imgName;
-        image.cpyrhtDivCd = cpyrhtDivCd;
-        image.serialNum = serialNum;
-        return image;
-    }
 }

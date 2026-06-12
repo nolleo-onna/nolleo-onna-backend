@@ -41,29 +41,4 @@ public class SpotPriceSummary {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
-    public static SpotPriceSummary create(String spotContentId) {
-        SpotPriceSummary summary = new SpotPriceSummary();
-        summary.spotContentId = spotContentId;
-        summary.menuCount = 0;
-        summary.sourceCount = 0;
-        summary.updatedAt = OffsetDateTime.now();
-        return summary;
-    }
-
-    public void update(
-            Integer minPrice,
-            Integer avgPrice,
-            String representativeMenuName,
-            Integer representativePrice,
-            int menuCount,
-            int sourceCount
-    ) {
-        this.minPrice = minPrice;
-        this.avgPrice = avgPrice;
-        this.representativeMenuName = representativeMenuName;
-        this.representativePrice = representativePrice;
-        this.menuCount = menuCount;
-        this.sourceCount = sourceCount;
-        this.updatedAt = OffsetDateTime.now();
-    }
 }
