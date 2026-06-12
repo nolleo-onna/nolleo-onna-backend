@@ -1,11 +1,13 @@
 package com.nolleo.onna.spot.domain.repository;
 
 import com.nolleo.onna.spot.domain.entity.SpotImages;
-import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 
-public interface SpotImagesRepository extends JpaRepository<SpotImages, Long> {
+public interface SpotImagesRepository {
+
+    Optional<SpotImages> findById(Long id);
 
     List<SpotImages> findByContentId(String contentId);
 }

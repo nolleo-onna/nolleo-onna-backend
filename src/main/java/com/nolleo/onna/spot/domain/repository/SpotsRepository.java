@@ -1,7 +1,13 @@
 package com.nolleo.onna.spot.domain.repository;
 
 import com.nolleo.onna.spot.domain.entity.Spots;
-import org.springframework.data.jpa.repository.JpaRepository;
 
-public interface SpotsRepository extends JpaRepository<Spots, String> {
+import java.util.List;
+import java.util.Optional;
+
+public interface SpotsRepository {
+
+    Optional<Spots> findById(String contentId);
+
+    List<Spots> findAll();
 }
