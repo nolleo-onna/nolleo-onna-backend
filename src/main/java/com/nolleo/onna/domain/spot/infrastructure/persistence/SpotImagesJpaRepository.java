@@ -1,7 +1,7 @@
-package com.nolleo.onna.spot.infrastructure.persistence;
+package com.nolleo.onna.domain.spot.infrastructure.persistence;
 
-import com.nolleo.onna.spot.domain.entity.SpotImages;
-import com.nolleo.onna.spot.domain.repository.SpotImagesRepository;
+import com.nolleo.onna.domain.spot.domain.entity.SpotImages;
+import com.nolleo.onna.domain.spot.domain.repository.SpotImagesRepository;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;

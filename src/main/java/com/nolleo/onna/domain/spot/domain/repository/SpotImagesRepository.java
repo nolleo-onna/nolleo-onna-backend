@@ -1,6 +1,6 @@
-package com.nolleo.onna.spot.domain.repository;
+package com.nolleo.onna.domain.spot.domain.repository;
 
-import com.nolleo.onna.spot.domain.entity.SpotImages;
+import com.nolleo.onna.domain.spot.domain.entity.SpotImages;
 
 import java.util.List;
 import java.util.Optional;

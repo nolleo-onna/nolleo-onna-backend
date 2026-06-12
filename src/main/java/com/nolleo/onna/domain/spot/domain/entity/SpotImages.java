@@ -1,4 +1,4 @@
-package com.nolleo.onna.spot.domain.entity;
+package com.nolleo.onna.domain.spot.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.AccessLevel;
