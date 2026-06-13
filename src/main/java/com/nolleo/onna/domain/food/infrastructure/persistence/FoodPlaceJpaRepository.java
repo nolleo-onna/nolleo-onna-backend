@@ -13,9 +13,11 @@ import java.util.Optional;
  */
 public interface FoodPlaceJpaRepository extends JpaRepository<FoodPlaceEntity, Long> {
 
-    /**
-     * 메뉴 포함 단건 조회 — fetch join 으로 N+1 방지.
-     */
+    /** 메뉴 포함 단건 조회 — fetch join 으로 N+1 방지. */
     @Query("SELECT f FROM FoodPlaceEntity f LEFT JOIN FETCH f.menus WHERE f.id = :id")
     Optional<FoodPlaceEntity> findByIdWithMenus(@Param("id") Long id);
+
+    /** 활성 음식점 전체 조회 — 지도 마커용, 메뉴 미로드. */
+    @Query("SELECT f FROM FoodPlaceEntity f WHERE f.active = true")
+    List<FoodPlaceEntity> findAllActive();
 }

@@ -13,4 +13,7 @@ public interface FoodPlaceRepository {
 
     /** ID로 단건 조회 (메뉴 포함) */
     Optional<FoodPlace> findById(Long id);
+
+    /** 활성 음식점 전체 조회 (지도 마커용 — 메뉴 미포함) */
+    List<FoodPlace> findAllActive();
 }
