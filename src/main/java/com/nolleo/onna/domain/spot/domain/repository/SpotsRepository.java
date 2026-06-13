@@ -10,4 +10,6 @@ public interface SpotsRepository {
     Optional<Spots> findById(String contentId);
 
     List<Spots> findAll();
+
+    List<Spots> findAllActive();
 }
