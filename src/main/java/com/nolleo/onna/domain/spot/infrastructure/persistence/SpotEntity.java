@@ -1,21 +1,22 @@
-package com.nolleo.onna.domain.spot.domain.entity;
+package com.nolleo.onna.domain.spot.infrastructure.persistence;
 
+import com.nolleo.onna.domain.spot.domain.model.Spot;
+import com.nolleo.onna.domain.spot.domain.model.vo.GeoCoordinate;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
+/** [JPA 엔티티] sp_spots 테이블 매핑. */
 @Entity
 @Table(name = "sp_spots")
-@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Spots {
+public class SpotEntity {
 
     @Id
     @Column(name = "content_id", length = 20)
@@ -73,9 +74,22 @@ public class Spots {
     private OffsetDateTime updatedAt;
 
     @Column(name = "is_active", nullable = false)
-    private boolean isActive;
+    private boolean active;
 
     @Column(name = "inactive_since")
     private OffsetDateTime inactiveSince;
 
+    /** 엔티티 → 도메인 모델 변환 */
+    public Spot toDomain() {
+        return new Spot(
+                contentId, contentTypeId, title,
+                sourceTourApi, sourceBusanFood,
+                GeoCoordinate.of(mapX, mapY),
+                lDongRegnCd, lDongSignguCd,
+                lclsSystm1, lclsSystm2, lclsSystm3,
+                firstImage, firstImage2, firstImageCpyrhtDivCd,
+                sourceModifiedTime, syncedAt, updatedAt,
+                active, inactiveSince
+        );
+    }
 }

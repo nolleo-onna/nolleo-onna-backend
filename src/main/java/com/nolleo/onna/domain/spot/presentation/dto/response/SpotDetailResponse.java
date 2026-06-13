@@ -1,9 +1,10 @@
 package com.nolleo.onna.domain.spot.presentation.dto.response;
 
-import com.nolleo.onna.domain.spot.domain.entity.SpotDetails;
-import com.nolleo.onna.domain.spot.domain.entity.SpotImages;
-import com.nolleo.onna.domain.spot.domain.entity.SpotPriceSummary;
-import com.nolleo.onna.domain.spot.domain.entity.Spots;
+import com.nolleo.onna.domain.spot.domain.model.Spot;
+import com.nolleo.onna.domain.spot.domain.model.SpotDetail;
+import com.nolleo.onna.domain.spot.domain.model.SpotImage;
+import com.nolleo.onna.domain.spot.domain.model.SpotPriceSummary;
+import com.nolleo.onna.domain.spot.domain.model.vo.GeoCoordinate;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -35,23 +36,24 @@ public record SpotDetailResponse(
         Integer representativePrice
 ) {
     public record ImageInfo(String originImgUrl, String smallImgUrl, String imgName) {
-        public static ImageInfo from(SpotImages image) {
+        public static ImageInfo from(SpotImage image) {
             return new ImageInfo(image.getOriginImgUrl(), image.getSmallImgUrl(), image.getImgName());
         }
     }
 
     public static SpotDetailResponse of(
-            Spots spot,
-            SpotDetails details,
-            List<SpotImages> images,
+            Spot spot,
+            SpotDetail detail,
+            List<SpotImage> images,
             SpotPriceSummary priceSummary
     ) {
+        GeoCoordinate geo = spot.getGeoCoordinate();
         return new SpotDetailResponse(
                 spot.getContentId(),
                 spot.getContentTypeId(),
                 spot.getTitle(),
-                spot.getMapX(),
-                spot.getMapY(),
+                geo != null ? geo.longitude() : null,
+                geo != null ? geo.latitude() : null,
                 spot.getFirstImage(),
                 spot.getFirstImage2(),
                 spot.getLclsSystm1(),
@@ -59,13 +61,13 @@ public record SpotDetailResponse(
                 spot.getLclsSystm3(),
                 spot.getLDongRegnCd(),
                 spot.getLDongSignguCd(),
-                details != null ? details.getTel() : null,
-                details != null ? details.getHomepage() : null,
-                details != null ? details.getAddr1() : null,
-                details != null ? details.getAddr2() : null,
-                details != null ? details.getZipcode() : null,
-                details != null ? details.getOverview() : null,
-                details != null ? details.getParkingAvailable() : null,
+                detail != null ? detail.getTel() : null,
+                detail != null ? detail.getHomepage() : null,
+                detail != null ? detail.getAddr1() : null,
+                detail != null ? detail.getAddr2() : null,
+                detail != null ? detail.getZipcode() : null,
+                detail != null ? detail.getOverview() : null,
+                detail != null ? detail.getParkingAvailable() : null,
                 images.stream().map(ImageInfo::from).toList(),
                 priceSummary != null ? priceSummary.getMinPrice() : null,
                 priceSummary != null ? priceSummary.getAvgPrice() : null,

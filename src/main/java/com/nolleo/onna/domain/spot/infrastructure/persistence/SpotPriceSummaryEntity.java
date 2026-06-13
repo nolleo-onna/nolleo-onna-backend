@@ -1,20 +1,20 @@
-package com.nolleo.onna.domain.spot.domain.entity;
+package com.nolleo.onna.domain.spot.infrastructure.persistence;
 
+import com.nolleo.onna.domain.spot.domain.model.SpotPriceSummary;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 import java.time.OffsetDateTime;
 
+/** [JPA 엔티티] sp_spot_price_summary 테이블 매핑. */
 @Entity
 @Table(name = "sp_spot_price_summary")
-@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class SpotPriceSummary {
+public class SpotPriceSummaryEntity {
 
     @Id
     @Column(name = "spot_content_id", length = 20)
@@ -41,4 +41,12 @@ public class SpotPriceSummary {
     @Column(name = "updated_at", nullable = false)
     private OffsetDateTime updatedAt;
 
+    /** 엔티티 → 도메인 모델 변환 */
+    public SpotPriceSummary toDomain() {
+        return new SpotPriceSummary(
+                spotContentId, minPrice, avgPrice,
+                representativeMenuName, representativePrice,
+                menuCount, sourceCount, updatedAt
+        );
+    }
 }

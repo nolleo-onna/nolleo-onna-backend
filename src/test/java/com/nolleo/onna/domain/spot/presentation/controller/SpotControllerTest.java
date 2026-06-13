@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.spot.presentation.controller;
 
 import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.common.security.jwt.JwtProvider;
 import com.nolleo.onna.domain.spot.application.service.SpotQueryService;
 import com.nolleo.onna.domain.spot.domain.exception.SpotErrorCode;
 import com.nolleo.onna.domain.spot.presentation.dto.response.SpotDetailResponse;
@@ -27,6 +28,7 @@ class SpotControllerTest {
 
     @Autowired MockMvc mockMvc;
     @MockBean SpotQueryService spotQueryService;
+    @MockBean JwtProvider jwtProvider;
 
     @Test
     @DisplayName("GET /api/spots/markers - 200 OK와 마커 목록을 반환한다")

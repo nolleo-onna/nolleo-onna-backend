@@ -1,11 +1,11 @@
 package com.nolleo.onna.domain.spot.application.service;
 
 import com.nolleo.onna.common.exception.BusinessException;
-import com.nolleo.onna.domain.spot.domain.entity.SpotDetails;
-import com.nolleo.onna.domain.spot.domain.entity.SpotImages;
-import com.nolleo.onna.domain.spot.domain.entity.SpotPriceSummary;
-import com.nolleo.onna.domain.spot.domain.entity.Spots;
 import com.nolleo.onna.domain.spot.domain.exception.SpotErrorCode;
+import com.nolleo.onna.domain.spot.domain.model.Spot;
+import com.nolleo.onna.domain.spot.domain.model.SpotDetail;
+import com.nolleo.onna.domain.spot.domain.model.SpotImage;
+import com.nolleo.onna.domain.spot.domain.model.SpotPriceSummary;
 import com.nolleo.onna.domain.spot.domain.repository.SpotDetailsRepository;
 import com.nolleo.onna.domain.spot.domain.repository.SpotImagesRepository;
 import com.nolleo.onna.domain.spot.domain.repository.SpotPriceSummaryRepository;
@@ -35,14 +35,14 @@ public class SpotQueryService {
     }
 
     public SpotDetailResponse getSpotDetail(String contentId) {
-        Spots spot = spotsRepository.findById(contentId)
-                .filter(Spots::isActive)
+        Spot spot = spotsRepository.findById(contentId)
+                .filter(Spot::isActive)
                 .orElseThrow(() -> new BusinessException(SpotErrorCode.SPOT_NOT_FOUND));
 
-        SpotDetails details = spotDetailsRepository.findById(contentId).orElse(null);
-        List<SpotImages> images = spotImagesRepository.findByContentId(contentId);
+        SpotDetail detail = spotDetailsRepository.findById(contentId).orElse(null);
+        List<SpotImage> images = spotImagesRepository.findByContentId(contentId);
         SpotPriceSummary priceSummary = spotPriceSummaryRepository.findById(contentId).orElse(null);
 
-        return SpotDetailResponse.of(spot, details, images, priceSummary);
+        return SpotDetailResponse.of(spot, detail, images, priceSummary);
     }
 }

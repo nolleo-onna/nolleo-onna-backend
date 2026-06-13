@@ -1,10 +1,11 @@
-package com.nolleo.onna.domain.spot.domain.entity;
+package com.nolleo.onna.domain.spot.infrastructure.persistence;
 
+import com.nolleo.onna.domain.spot.domain.model.SpotImage;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
-import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+/** [JPA 엔티티] sp_spot_images 테이블 매핑. */
 @Entity
 @Table(
         name = "sp_spot_images",
@@ -13,9 +14,8 @@ import lombok.NoArgsConstructor;
                 columnNames = {"content_id", "serial_num"}
         )
 )
-@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class SpotImages {
+public class SpotImageEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "spot_images_seq")
@@ -41,4 +41,8 @@ public class SpotImages {
     @Column(name = "serial_num", length = 20, nullable = false)
     private String serialNum;
 
+    /** 엔티티 → 도메인 모델 변환 */
+    public SpotImage toDomain() {
+        return new SpotImage(id, contentId, originImgUrl, smallImgUrl, imgName, cpyrhtDivCd, serialNum);
+    }
 }
