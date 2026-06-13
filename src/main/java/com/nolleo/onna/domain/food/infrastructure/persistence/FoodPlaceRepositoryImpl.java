@@ -15,37 +15,10 @@ public class FoodPlaceRepositoryImpl implements FoodPlaceRepository {
 
     private final FoodPlaceJpaRepository jpaRepository;
 
+    /** fetch join으로 menus를 함께 로드 — N+1 없음 */
     @Override
     public Optional<FoodPlace> findById(Long id) {
         return jpaRepository.findByIdWithMenus(id)
                 .map(FoodPlaceEntity::toDomain);
-    }
-
-    @Override
-    public List<FoodPlace> findAllActive() {
-        return jpaRepository.findAllByActiveTrue().stream()
-                .map(FoodPlaceEntity::toDomain)
-                .toList();
-    }
-
-    @Override
-    public List<FoodPlace> findAllByNormalizedCategory(String normalizedCategory) {
-        return jpaRepository.findAllByNormalizedCategoryAndActiveTrue(normalizedCategory).stream()
-                .map(FoodPlaceEntity::toDomain)
-                .toList();
-    }
-
-    @Override
-    public List<FoodPlace> findAllCourseFoodCandidates() {
-        return jpaRepository.findAllByCourseFoodCandidateTrueAndActiveTrue().stream()
-                .map(FoodPlaceEntity::toDomain)
-                .toList();
-    }
-
-    @Override
-    public List<FoodPlace> findAllBySourceRegion(String sourceRegion) {
-        return jpaRepository.findAllBySourceRegionAndActiveTrue(sourceRegion).stream()
-                .map(FoodPlaceEntity::toDomain)
-                .toList();
     }
 }

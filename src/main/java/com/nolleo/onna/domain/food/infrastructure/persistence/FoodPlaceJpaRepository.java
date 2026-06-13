@@ -18,24 +18,4 @@ public interface FoodPlaceJpaRepository extends JpaRepository<FoodPlaceEntity, L
      */
     @Query("SELECT f FROM FoodPlaceEntity f LEFT JOIN FETCH f.menus WHERE f.id = :id")
     Optional<FoodPlaceEntity> findByIdWithMenus(@Param("id") Long id);
-
-    /**
-     * 활성 장소 전체 조회.
-     */
-    List<FoodPlaceEntity> findAllByActiveTrue();
-
-    /**
-     * 표준 업종 분류별 활성 장소 조회.
-     */
-    List<FoodPlaceEntity> findAllByNormalizedCategoryAndActiveTrue(String normalizedCategory);
-
-    /**
-     * 코스 식사 후보 + 활성 장소 조회.
-     */
-    List<FoodPlaceEntity> findAllByCourseFoodCandidateTrueAndActiveTrue();
-
-    /**
-     * 지역별 활성 장소 조회.
-     */
-    List<FoodPlaceEntity> findAllBySourceRegionAndActiveTrue(String sourceRegion);
 }

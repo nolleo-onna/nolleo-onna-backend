@@ -96,7 +96,6 @@ public class FoodPlaceEntity {
 
     /**
      * 메뉴 목록 — 같은 바운디드 컨텍스트 내 동일 애그리게이트이므로 @OneToMany 사용.
-     * FK 제약조건 생성 방지: DB는 이미 생성된 상태이며 팀 합의에 따라 FK 없음.
      */
     @OneToMany(fetch = FetchType.LAZY)
     @JoinColumn(name = "food_place_id", insertable = false, updatable = false,
