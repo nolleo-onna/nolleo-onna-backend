@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 @Slf4j(topic = "Exception")
@@ -40,6 +41,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NoHandlerFoundException.class)
     protected ResponseEntity<ErrorResponseDto> handleNoHandlerFoundException(NoHandlerFoundException e) {
         log.warn("존재하지 않는 URL 입니다");
+        return ErrorResponseDto.fail(CommonErrorCode.NO_HANDLER_FOUND, e.getMessage());
+    }
+
+    // NoResourceFoundException (Spring 6.x / Spring Boot 3.x — 정적 리소스 없음)
+    @ExceptionHandler(NoResourceFoundException.class)
+    protected ResponseEntity<ErrorResponseDto> handleNoResourceFoundException(NoResourceFoundException e) {
+        log.warn("존재하지 않는 리소스입니다 - {}", e.getMessage());
         return ErrorResponseDto.fail(CommonErrorCode.NO_HANDLER_FOUND, e.getMessage());
     }
     // MethodArgumentTypeMismatchException
