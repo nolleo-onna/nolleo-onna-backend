@@ -21,4 +21,11 @@ public class FoodPlaceRepositoryImpl implements FoodPlaceRepository {
         return jpaRepository.findByIdWithMenus(id)
                 .map(FoodPlaceEntity::toDomain);
     }
+
+    @Override
+    public List<FoodPlace> findAllActive() {
+        return jpaRepository.findAllActive().stream()
+                .map(FoodPlaceEntity::toDomainWithoutMenus)
+                .toList();
+    }
 }

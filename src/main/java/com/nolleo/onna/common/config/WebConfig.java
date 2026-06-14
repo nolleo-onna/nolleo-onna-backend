@@ -11,7 +11,8 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void configurePathMatch(PathMatchConfigurer configurer) {
         configurer.addPathPrefix("/api/v1",
-                url -> url.isAnnotationPresent(RestController.class) ||
-                        url.isAnnotationPresent(Controller.class));
+                url -> (url.isAnnotationPresent(RestController.class) ||
+                        url.isAnnotationPresent(Controller.class)) &&
+                       url.getPackageName().startsWith("com.nolleo.onna"));
     }
 }

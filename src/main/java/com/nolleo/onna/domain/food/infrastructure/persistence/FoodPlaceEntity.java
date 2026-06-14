@@ -113,4 +113,16 @@ public class FoodPlaceEntity {
                 menus.stream().map(FoodPlaceMenuEntity::toDomain).toList()
         );
     }
+
+    /** 엔티티 → 도메인 모델 변환 (메뉴 미포함 — 지도 마커 조회용) */
+    public FoodPlace toDomainWithoutMenus() {
+        return new FoodPlace(
+                id, name, businessCategory, normalizedCategory,
+                courseFoodCandidate, address, tel, businessHoursRaw,
+                description, representativeMenu, deliveryAvailable, parkingAvailable,
+                sourceRegion, GeoCoordinate.of(mapX, mapY),
+                active, inactiveSince,
+                List.of()
+        );
+    }
 }
