@@ -2,7 +2,7 @@ spring:
   application:
     name: onna
   profiles:
-    active: local
+    active: docker
 
   datasource:
     driver-class-name: org.postgresql.Driver
