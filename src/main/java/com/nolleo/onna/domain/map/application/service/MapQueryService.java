@@ -1,32 +1,32 @@
 package com.nolleo.onna.domain.map.application.service;
 
-import com.nolleo.onna.domain.food.domain.repository.FoodPlaceRepository;
+import com.nolleo.onna.domain.map.domain.model.vo.PlaceCategory;
+import com.nolleo.onna.domain.map.domain.repository.MapPlaceRepository;
 import com.nolleo.onna.domain.map.presentation.dto.response.MapMarkerResponse;
-import com.nolleo.onna.domain.spot.domain.repository.SpotsRepository;
+import com.nolleo.onna.domain.map.presentation.dto.response.MapPlaceResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.stream.Stream;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MapQueryService {
 
-    private final SpotsRepository spotsRepository;
-    private final FoodPlaceRepository foodPlaceRepository;
+    private final MapPlaceRepository mapPlaceRepository;
 
-    public List<MapMarkerResponse> getMapMarkers() {
-        List<MapMarkerResponse> spotMarkers = spotsRepository.findAllActive().stream()
-                .map(MapMarkerResponse::fromSpot)
+    public List<MapMarkerResponse> getMapMarkers(String district, PlaceCategory category, Integer maxBudget) {
+        return mapPlaceRepository.findByFilter(district, category, maxBudget).stream()
+                .map(MapMarkerResponse::fromMapPlace)
                 .toList();
+    }
 
-        List<MapMarkerResponse> foodMarkers = foodPlaceRepository.findAllActive().stream()
-                .map(MapMarkerResponse::fromFood)
-                .toList();
-
-        return Stream.concat(spotMarkers.stream(), foodMarkers.stream()).toList();
+    public Page<MapPlaceResponse> getMapPlaces(String district, PlaceCategory category, Integer maxBudget, Pageable pageable) {
+        return mapPlaceRepository.findByFilterPaged(district, category, maxBudget, pageable)
+                .map(MapPlaceResponse::from);
     }
 }

@@ -58,8 +58,10 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // OAuth 로그인 시작·콜백
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
-                        // 지도 마커 조회 — 비로그인 사용자도 접근 가능
-                        .requestMatchers("/api/v1/map/markers").permitAll()
+                        // 지도·장소 조회 — 비로그인 사용자도 접근 가능
+                        .requestMatchers("/api/v1/map/**").permitAll()
+                        .requestMatchers("/api/v1/spots/**").permitAll()
+                        .requestMatchers("/api/v1/food/**").permitAll()
                         // 재발급은 access 없이 refresh 쿠키로 동작 → permitAll
                         .requestMatchers("/api/v1/auth/refresh").permitAll()
                         // me/logout 등 나머지는 인증 필요
