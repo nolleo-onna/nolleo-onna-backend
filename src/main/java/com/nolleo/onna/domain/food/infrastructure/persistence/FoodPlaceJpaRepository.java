@@ -20,4 +20,8 @@ public interface FoodPlaceJpaRepository extends JpaRepository<FoodPlaceEntity, L
     /** 활성 음식점 전체 조회 — 지도 마커용, 메뉴 미로드. */
     @Query("SELECT f FROM FoodPlaceEntity f WHERE f.active = true")
     List<FoodPlaceEntity> findAllActive();
+
+    /** 활성 음식점 전체 조회 — 메뉴 포함, fetch join으로 N+1 방지. */
+    @Query("SELECT DISTINCT f FROM FoodPlaceEntity f LEFT JOIN FETCH f.menus WHERE f.active = true")
+    List<FoodPlaceEntity> findAllActiveWithMenus();
 }
