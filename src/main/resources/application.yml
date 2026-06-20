@@ -20,16 +20,13 @@ spring:
     show-sql: false
     open-in-view: false
 
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    baseline-version: 0
-    locations: classpath:db/migration
-
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+    web:
+      pageable:
+        max-page-size: 100
 
   # ── OAuth2 클라이언트 (백엔드 주도 패턴 A) ──────────────────────────────
   # 로그인 시작: GET /oauth2/authorization/{google|kakao|naver}
