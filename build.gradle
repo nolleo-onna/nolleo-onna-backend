@@ -46,6 +46,10 @@ dependencies {
 	// PostgreSQL
 	runtimeOnly 'org.postgresql:postgresql'
 
+	// Flyway
+	implementation 'org.flywaydb:flyway-core'
+	runtimeOnly 'org.flywaydb:flyway-database-postgresql'
+
 	// .env file support
 	implementation 'me.paulschwarz:spring-dotenv:4.0.0'
 

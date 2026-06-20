@@ -28,4 +28,11 @@ public class FoodPlaceRepositoryImpl implements FoodPlaceRepository {
                 .map(FoodPlaceEntity::toDomainWithoutMenus)
                 .toList();
     }
+
+    @Override
+    public List<FoodPlace> findAllActiveWithMenus() {
+        return jpaRepository.findAllActiveWithMenus().stream()
+                .map(FoodPlaceEntity::toDomain)
+                .toList();
+    }
 }

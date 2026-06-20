@@ -16,4 +16,7 @@ public interface FoodPlaceRepository {
 
     /** 활성 음식점 전체 조회 (지도 마커용 — 메뉴 미포함) */
     List<FoodPlace> findAllActive();
+
+    /** 활성 음식점 전체 조회 (메뉴 포함 — 동기화용) */
+    List<FoodPlace> findAllActiveWithMenus();
 }
