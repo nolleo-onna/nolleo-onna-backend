@@ -32,6 +32,37 @@ public class MapPlaceRepositoryImpl implements MapPlaceRepository {
     }
 
     @Override
+    public List<MapPlace> findNearbyByDistrict(String district, double lat, double lon) {
+        return jpaRepository.findNearbyByDistrict(district, lat, lon).stream()
+                .map(MapPlaceEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    public List<MapPlace> findByIdsOrderByDistance(List<Long> ids, double lat, double lon) {
+        return jpaRepository.findByIdsOrderByDistance(ids, lat, lon).stream()
+                .map(MapPlaceEntity::toDomain)
+                .toList();
+    }
+
+    @Override
+    public int distanceMetersBetween(Long id1, Long id2) {
+        Double result = jpaRepository.distanceMetersBetween(id1, id2);
+        return result != null ? result.intValue() : 0;
+    }
+
+    @Override
+    public int distanceMetersFromPoint(double lat, double lon, Long id) {
+        Double result = jpaRepository.distanceMetersFromPoint(lat, lon, id);
+        return result != null ? result.intValue() : 0;
+    }
+
+    @Override
+    public Optional<MapPlace> findById(Long id) {
+        return jpaRepository.findById(id).map(MapPlaceEntity::toDomain);
+    }
+
+    @Override
     public Optional<MapPlace> findByPlaceTypeAndOriginalId(PlaceType placeType, String originalId) {
         return jpaRepository.findByPlaceTypeAndOriginalId(placeType, originalId)
                 .map(MapPlaceEntity::toDomain);
