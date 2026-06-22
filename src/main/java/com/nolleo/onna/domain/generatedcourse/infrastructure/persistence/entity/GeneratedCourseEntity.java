@@ -7,12 +7,15 @@ import com.nolleo.onna.domain.generatedcourse.domain.model.GeneratedCourse;
 import com.nolleo.onna.domain.generatedcourse.domain.model.GeneratedCourseItem;
 import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseInput;
 import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseSummary;
+import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseType;
 import com.nolleo.onna.domain.generatedcourse.domain.model.vo.ShareInfo;
 import com.nolleo.onna.domain.generatedcourse.infrastructure.persistence.converter.StringListConverter;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,7 +47,13 @@ public class GeneratedCourseEntity {
     @Column(name = "pair_id")
     private UUID pairId;
 
+    /** 코스 타입 (ACTIVE / CULTURE / FOOD_TOUR) */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "course_type", length = 20)
+    private CourseType courseType;
+
     /** 추천 가중치 프로필 (JSONB) */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "weight_profile", columnDefinition = "jsonb")
     private String weightProfile;
 
@@ -72,9 +81,9 @@ public class GeneratedCourseEntity {
     @Column(name = "input_companion", length = 30)
     private String inputCompanion;
 
-    /** 사용자 입력 분위기/태그 목록 (text[]) */
+    /** 사용자 입력 분위기/태그 목록 (JSON 배열 문자열) */
     @Convert(converter = StringListConverter.class)
-    @Column(name = "input_mood", columnDefinition = "text[]")
+    @Column(name = "input_mood", columnDefinition = "text")
     private List<String> inputMood;
 
     /** 생성 모드 (예: "AI", "MANUAL") */
@@ -102,6 +111,7 @@ public class GeneratedCourseEntity {
     private String comparedWithTravelCourseId;
 
     /** 코스 생성 시점 날씨/환경 스냅샷 (JSONB) */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "weather_at_gen", columnDefinition = "jsonb")
     private String weatherAtGen;
 
@@ -147,6 +157,7 @@ public class GeneratedCourseEntity {
         entity.userId = course.getUserId();
         entity.parentCourseId = course.getParentCourseId();
         entity.pairId = course.getPairId();
+        entity.courseType = course.getCourseType();
         entity.title = course.getTitle();
         entity.description = course.getDescription();
         entity.inputSigngu = course.getCourseInput() != null ? course.getCourseInput().signgu() : null;
@@ -166,7 +177,7 @@ public class GeneratedCourseEntity {
         entity.shareToken = course.getShareInfo() != null ? course.getShareInfo().shareToken() : null;
         entity.viewCount = course.getShareInfo() != null ? course.getShareInfo().viewCount() : 0;
         entity.createAudit = CreateAudit.now(course.getCreatedBy());
-        entity.updateAudit = UpdateAudit.empty();
+        entity.updateAudit = UpdateAudit.now();
         entity.softDeleteAudit = SoftDeleteAudit.active();
         // 자식 엔티티 변환 및 양방향 연관 관계 설정
         entity.items.clear();
@@ -186,7 +197,7 @@ public class GeneratedCourseEntity {
                 .toList();
 
         return GeneratedCourse.restore(
-                id, userId, parentCourseId, pairId,
+                id, userId, parentCourseId, pairId, courseType,
                 title, description,
                 CourseInput.of(inputSigngu, inputBudget, inputDuration, inputCompanion, inputMood),
                 generationMode, generationMethod,
