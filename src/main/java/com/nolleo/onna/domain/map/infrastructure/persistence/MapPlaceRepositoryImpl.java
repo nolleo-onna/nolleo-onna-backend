@@ -20,9 +20,9 @@ public class MapPlaceRepositoryImpl implements MapPlaceRepository {
 
     @Override
     public List<MapPlace> findByFilter(String district, PlaceCategory category, Integer maxBudget) {
-        return jpaRepository.findByFilter(district, category, maxBudget).stream()
+        return jpaRepository.findByFilterPaged(district, category, maxBudget, Pageable.unpaged())
                 .map(MapPlaceEntity::toDomain)
-                .toList();
+                .getContent();
     }
 
     @Override

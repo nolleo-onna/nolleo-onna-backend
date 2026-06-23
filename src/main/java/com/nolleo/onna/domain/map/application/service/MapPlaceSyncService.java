@@ -18,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -42,11 +44,17 @@ public class MapPlaceSyncService {
 
     @Transactional
     public void syncAllSpots() {
-        spotsRepository.findAllActive().forEach(spot -> {
-            SpotDetail detail = spotDetailsRepository.findById(spot.getContentId()).orElse(null);
-            SpotPriceSummary priceSummary = spotPriceSummaryRepository.findById(spot.getContentId()).orElse(null);
-            syncSpot(spot, detail, priceSummary);
-        });
+        List<Spot> spots = spotsRepository.findAllActive();
+        List<String> contentIds = spots.stream().map(Spot::getContentId).toList();
+
+        Map<String, SpotDetail> detailMap = spotDetailsRepository.findAllByIds(contentIds);
+        Map<String, SpotPriceSummary> priceMap = spotPriceSummaryRepository.findAllByIds(contentIds);
+
+        spots.forEach(spot -> syncSpot(
+                spot,
+                detailMap.get(spot.getContentId()),
+                priceMap.get(spot.getContentId())
+        ));
     }
 
     public void syncFood(FoodPlace food) {

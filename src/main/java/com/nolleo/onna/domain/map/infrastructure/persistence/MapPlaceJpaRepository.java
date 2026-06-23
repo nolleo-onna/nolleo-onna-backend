@@ -16,17 +16,7 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
     @Query("SELECT e FROM MapPlaceEntity e WHERE e.active = true " +
            "AND (:district IS NULL OR e.district = :district) " +
            "AND (:category IS NULL OR e.category = :category) " +
-           "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice <= :maxBudget)")
-    List<MapPlaceEntity> findByFilter(
-        @Param("district") String district,
-        @Param("category") PlaceCategory category,
-        @Param("maxBudget") Integer maxBudget
-    );
-
-    @Query("SELECT e FROM MapPlaceEntity e WHERE e.active = true " +
-           "AND (:district IS NULL OR e.district = :district) " +
-           "AND (:category IS NULL OR e.category = :category) " +
-           "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice <= :maxBudget)")
+           "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice IS NULL OR e.minPrice <= :maxBudget)")
     Page<MapPlaceEntity> findByFilterPaged(
         @Param("district") String district,
         @Param("category") PlaceCategory category,
