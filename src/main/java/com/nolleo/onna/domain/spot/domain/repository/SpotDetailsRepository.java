@@ -2,6 +2,8 @@ package com.nolleo.onna.domain.spot.domain.repository;
 
 import com.nolleo.onna.domain.spot.domain.model.SpotDetail;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -11,4 +13,6 @@ import java.util.Optional;
 public interface SpotDetailsRepository {
 
     Optional<SpotDetail> findById(String contentId);
+
+    Map<String, SpotDetail> findAllByIds(List<String> contentIds);
 }

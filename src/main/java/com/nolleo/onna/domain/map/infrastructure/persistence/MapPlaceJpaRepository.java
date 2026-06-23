@@ -8,7 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Long> {
@@ -16,17 +15,7 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
     @Query("SELECT e FROM MapPlaceEntity e WHERE e.active = true " +
            "AND (:district IS NULL OR e.district = :district) " +
            "AND (:category IS NULL OR e.category = :category) " +
-           "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice <= :maxBudget)")
-    List<MapPlaceEntity> findByFilter(
-        @Param("district") String district,
-        @Param("category") PlaceCategory category,
-        @Param("maxBudget") Integer maxBudget
-    );
-
-    @Query("SELECT e FROM MapPlaceEntity e WHERE e.active = true " +
-           "AND (:district IS NULL OR e.district = :district) " +
-           "AND (:category IS NULL OR e.category = :category) " +
-           "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice <= :maxBudget)")
+           "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice IS NULL OR e.minPrice <= :maxBudget)")
     Page<MapPlaceEntity> findByFilterPaged(
         @Param("district") String district,
         @Param("category") PlaceCategory category,
