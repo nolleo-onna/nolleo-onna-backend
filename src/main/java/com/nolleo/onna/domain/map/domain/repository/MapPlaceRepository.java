@@ -8,7 +8,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public interface MapPlaceRepository {
 
@@ -21,6 +23,9 @@ public interface MapPlaceRepository {
     /** 지정 ID 목록의 장소를 (lat, lon) 기준 가까운 순으로 정렬한 목록 */
     List<MapPlace> findByIdsOrderByDistance(List<Long> ids, double lat, double lon);
 
+    /** 지정 ID 목록의 장소를 distance 순 정렬하면서 각 장소까지의 거리(m)를 id → distance 맵으로 반환 */
+    Map<Long, Integer> findDistancesFromPoint(List<Long> ids, double lat, double lon);
+
     /** 두 장소 간 직선 거리 (미터) */
     int distanceMetersBetween(Long id1, Long id2);
 
@@ -32,6 +37,9 @@ public interface MapPlaceRepository {
 
     /** id로 장소 단건 조회 */
     Optional<MapPlace> findById(Long id);
+
+    /** id 목록으로 장소 일괄 조회 */
+    Map<Long, MapPlace> findAllByIds(Set<Long> ids);
 
     /** placeType + originalId 로 장소 단건 조회 */
     Optional<MapPlace> findByPlaceTypeAndOriginalId(PlaceType placeType, String originalId);

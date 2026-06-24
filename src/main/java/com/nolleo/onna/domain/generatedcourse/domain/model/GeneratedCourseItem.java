@@ -13,10 +13,10 @@ import java.time.LocalTime;
 public class GeneratedCourseItem {
 
     /** 내부 코스 아이템 식별자 (PK) */
-    private final Long id;
+    private Long id;
 
     /** 소속 코스 ID (FK) */
-    private final Long courseId;
+    private Long courseId;
 
     /** 코스 내 방문 순서 (1부터 시작) */
     private final Short serialNum;
@@ -66,6 +66,8 @@ public class GeneratedCourseItem {
         GeneratedCourseItem item = new GeneratedCourseItem(serialNum, mapPlaceId,
                 durationMinutes != null ? durationMinutes : 0,
                 distanceFromPrevM != null ? distanceFromPrevM : 0);
+        item.id = id;
+        item.courseId = courseId;
         item.arrivalTime = arrivalTime;
         item.expectedCost = expectedCost;
         item.notes = notes;

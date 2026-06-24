@@ -9,8 +9,12 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -46,6 +50,18 @@ public class MapPlaceRepositoryImpl implements MapPlaceRepository {
     }
 
     @Override
+    public Map<Long, Integer> findDistancesFromPoint(List<Long> ids, double lat, double lon) {
+        List<Object[]> rows = jpaRepository.findByIdsWithDistanceFromPoint(ids, lat, lon);
+        Map<Long, Integer> result = new LinkedHashMap<>();
+        for (Object[] row : rows) {
+            Long id = ((Number) row[0]).longValue();
+            int distance = row[1] != null ? ((Number) row[1]).intValue() : 0;
+            result.put(id, distance);
+        }
+        return result;
+    }
+
+    @Override
     public int distanceMetersBetween(Long id1, Long id2) {
         Double result = jpaRepository.distanceMetersBetween(id1, id2);
         return result != null ? result.intValue() : 0;
@@ -60,6 +76,13 @@ public class MapPlaceRepositoryImpl implements MapPlaceRepository {
     @Override
     public Optional<MapPlace> findById(Long id) {
         return jpaRepository.findById(id).map(MapPlaceEntity::toDomain);
+    }
+
+    @Override
+    public Map<Long, MapPlace> findAllByIds(Set<Long> ids) {
+        return jpaRepository.findAllById(ids).stream()
+                .map(MapPlaceEntity::toDomain)
+                .collect(Collectors.toMap(MapPlace::getId, p -> p));
     }
 
     @Override

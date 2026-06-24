@@ -49,17 +49,16 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
             @Param("lon") double lon
     );
 
+    /** 장소 목록을 distance 순으로 정렬하면서 각 장소까지의 거리(m)도 함께 반환 — [id, distanceMeters] */
     @Query(value = """
-            SELECT ST_Distance(a.geog, b.geog)
-            FROM mp_map_places a, mp_map_places b
-            WHERE a.id = :id1 AND b.id = :id2
-            """, nativeQuery = true)
-    Double distanceMetersBetween(@Param("id1") Long id1, @Param("id2") Long id2);
-
-    @Query(value = """
-            SELECT ST_Distance(ST_MakePoint(:lon, :lat)::geography, geog)
+            SELECT id, ST_Distance(geog, ST_MakePoint(:lon, :lat)::geography) AS distance_m
             FROM mp_map_places
-            WHERE id = :id
+            WHERE id IN (:ids)
+            ORDER BY distance_m
             """, nativeQuery = true)
-    Double distanceMetersFromPoint(@Param("lat") double lat, @Param("lon") double lon, @Param("id") Long id);
+    List<Object[]> findByIdsWithDistanceFromPoint(
+            @Param("ids") List<Long> ids,
+            @Param("lat") double lat,
+            @Param("lon") double lon
+    );
 }

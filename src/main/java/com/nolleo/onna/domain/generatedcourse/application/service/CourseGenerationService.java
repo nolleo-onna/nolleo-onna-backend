@@ -59,20 +59,16 @@ public class CourseGenerationService {
                     courseInput, "default", "form",
                     String.valueOf(command.userId()));
 
-            // PostGIS — 선택된 장소들을 중심에서 가까운 순으로 정렬
+            // PostGIS — 선택된 장소들을 중심에서 가까운 순으로 정렬 + 거리값 일괄 조회 (쿼리 1회)
             List<Long> itemIds = items.stream().map(MapPlace::getId).toList();
             List<MapPlace> route = mapPlaceRepository.findByIdsOrderByDistance(
                     itemIds, center.getLatitude(), center.getLongitude());
+            Map<Long, Integer> distanceMap = mapPlaceRepository.findDistancesFromPoint(
+                    itemIds, center.getLatitude(), center.getLongitude());
 
-            for (int i = 0; i < route.size(); i++) {
-                MapPlace place = route.get(i);
+            for (MapPlace place : route) {
                 short duration = CourseComposer.durationOf(place.getCategory());
-                short distance = i == 0
-                        ? (short) mapPlaceRepository.distanceMetersFromPoint(
-                                center.getLatitude(), center.getLongitude(), place.getId())
-                        : (short) mapPlaceRepository.distanceMetersBetween(
-                                route.get(i - 1).getId(), place.getId());
-
+                short distance = distanceMap.getOrDefault(place.getId(), 0).shortValue();
                 course.addItem(place.getId(), duration, distance);
             }
 
@@ -99,9 +95,7 @@ public class CourseGenerationService {
             if (item.getMapPlaceId() != null) mapPlaceIds.add(item.getMapPlaceId());
         }));
 
-        Map<Long, MapPlace> placeById = new HashMap<>();
-        mapPlaceIds.forEach(id -> mapPlaceRepository.findById(id)
-                .ifPresent(p -> placeById.put(id, p)));
+        Map<Long, MapPlace> placeById = mapPlaceRepository.findAllByIds(mapPlaceIds);
 
         List<CourseResponse> courseResponses = filtered.stream()
                 .map(c -> CourseResponse.from(c, placeById))
