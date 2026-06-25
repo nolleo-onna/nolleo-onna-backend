@@ -2,6 +2,9 @@ package com.nolleo.onna.domain.generatedcourse.presentation;
 
 import com.nolleo.onna.common.response.ApiResponseDto;
 import com.nolleo.onna.common.security.AuthPrincipal;
+import com.nolleo.onna.domain.generatedcourse.application.dto.GenerateCourseCommand;
+import com.nolleo.onna.domain.generatedcourse.application.service.CourseGenerationService;
+import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseType;
 import com.nolleo.onna.domain.generatedcourse.presentation.dto.request.GenerateCourseRequest;
 import com.nolleo.onna.domain.generatedcourse.presentation.dto.response.GenerateCourseResponse;
 import com.nolleo.onna.domain.generatedcourse.presentation.dto.response.PairCourseResponse;
@@ -16,23 +19,25 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.UUID;
 
-// WebConfig가 "/api/v1" 프리픽스를 자동 부여 → 실제 경로는 /api/v1/courses/**.
 @Tag(name = "Course", description = "코스 생성/재생성/조회 API")
 @RestController
 @RequestMapping("/courses")
 @RequiredArgsConstructor
 public class CourseController {
 
+    private final CourseGenerationService courseGenerationService;
+
     @Operation(
             summary = "코스 생성",
-            description = "사용자 입력 조건(지역·예산·여행시간·동행유형)을 기반으로 AI가 2~3개의 코스를 생성합니다."
+            description = "지역·여행시간·동행유형을 기반으로 ACTIVE/CULTURE/FOOD_TOUR 3가지 코스를 생성합니다."
     )
     @PostMapping("/generate")
     public ResponseEntity<ApiResponseDto<GenerateCourseResponse>> generate(
             @AuthenticationPrincipal AuthPrincipal principal,
             @Valid @RequestBody GenerateCourseRequest request) {
-        // TODO: CourseGenerationService 구현 후 연결
-        throw new UnsupportedOperationException("구현 예정");
+        Long userId = principal.userId();
+        return ApiResponseDto.success(200, "코스 생성 성공",
+                courseGenerationService.generate(GenerateCourseCommand.of(userId, request)));
     }
 
     @Operation(
@@ -44,20 +49,22 @@ public class CourseController {
             @AuthenticationPrincipal AuthPrincipal principal,
             @Parameter(description = "재생성 기준 코스 ID", example = "101")
             @PathVariable Long courseId) {
-        // TODO: CourseGenerationService 구현 후 연결
+        // TODO: 재생성 구현
         throw new UnsupportedOperationException("구현 예정");
     }
 
     @Operation(
             summary = "pairId로 코스 묶음 조회",
-            description = "같은 입력 조건으로 생성된 코스 묶음(2~3개)을 조회합니다."
+            description = "같은 입력 조건으로 생성된 코스 묶음을 조회합니다. type 파라미터로 특정 타입만 필터링 가능합니다."
     )
     @GetMapping("/pair/{pairId}")
     public ResponseEntity<ApiResponseDto<PairCourseResponse>> getByPairId(
             @AuthenticationPrincipal AuthPrincipal principal,
             @Parameter(description = "코스 묶음 UUID", example = "550e8400-e29b-41d4-a716-446655440000")
-            @PathVariable UUID pairId) {
-        // TODO: CourseGenerationService 구현 후 연결
-        throw new UnsupportedOperationException("구현 예정");
+            @PathVariable UUID pairId,
+            @Parameter(description = "코스 타입 필터 (ACTIVE / CULTURE / FOOD_TOUR), 생략 시 전체 반환")
+            @RequestParam(required = false) CourseType type) {
+        return ApiResponseDto.success(200, "코스 조회 성공",
+                courseGenerationService.getByPairId(pairId, type));
     }
 }

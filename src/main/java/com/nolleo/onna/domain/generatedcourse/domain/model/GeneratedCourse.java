@@ -2,6 +2,7 @@ package com.nolleo.onna.domain.generatedcourse.domain.model;
 
 import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseInput;
 import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseSummary;
+import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseType;
 import com.nolleo.onna.domain.generatedcourse.domain.model.vo.ShareInfo;
 import lombok.Getter;
 
@@ -60,6 +61,9 @@ public class GeneratedCourse {
     /** 공개 공유 상태 묶음 (공개여부·토큰·조회수) */
     private ShareInfo shareInfo;
 
+    /** 코스 타입 (ACTIVE / CULTURE / FOOD_TOUR) */
+    private final CourseType courseType;
+
     /** 코스를 구성하는 방문 스팟 목록 */
     private final List<GeneratedCourseItem> items;
 
@@ -70,13 +74,14 @@ public class GeneratedCourse {
     private final String createdBy;
 
     /** create() 전용 생성자 — 신규 코스 기본값 초기화 */
-    private GeneratedCourse(Long userId, String title, String description,
-                             CourseInput courseInput, String generationMode,
-                             String generationMethod, String createdBy) {
+    private GeneratedCourse(Long userId, UUID pairId, CourseType courseType, String title,
+                             String description, CourseInput courseInput,
+                             String generationMode, String generationMethod, String createdBy) {
         this.id = null;
         this.userId = userId;
         this.parentCourseId = null;
-        this.pairId = null;
+        this.pairId = pairId;
+        this.courseType = courseType;
         this.title = title;
         this.description = description;
         this.courseInput = courseInput;
@@ -93,8 +98,8 @@ public class GeneratedCourse {
 
     /** restore() 전용 생성자 — DB 조회값 그대로 주입 */
     private GeneratedCourse(Long id, Long userId, Long parentCourseId, UUID pairId,
-                             String title, String description, CourseInput courseInput,
-                             String generationMode, String generationMethod,
+                             CourseType courseType, String title, String description,
+                             CourseInput courseInput, String generationMode, String generationMethod,
                              CourseSummary courseSummary, String comparedWithTravelCourseId,
                              String weightProfile, String weatherAtGen, ShareInfo shareInfo,
                              List<GeneratedCourseItem> items, OffsetDateTime createdAt,
@@ -103,6 +108,7 @@ public class GeneratedCourse {
         this.userId = userId;
         this.parentCourseId = parentCourseId;
         this.pairId = pairId;
+        this.courseType = courseType;
         this.title = title;
         this.description = description;
         this.courseInput = courseInput;
@@ -124,13 +130,14 @@ public class GeneratedCourse {
      * 코스 최초 생성.
      * 생성 시점에 확정되는 값만 받으며, 공개 여부는 항상 비공개로 초기화.
      */
-    public static GeneratedCourse create(Long userId, String title, String description,
+    public static GeneratedCourse create(Long userId, UUID pairId, CourseType courseType,
+                                          String title, String description,
                                           CourseInput courseInput, String generationMode,
                                           String generationMethod, String createdBy) {
         if (userId == null) throw new IllegalArgumentException("userId는 필수입니다.");
         if (title == null || title.isBlank()) throw new IllegalArgumentException("코스 제목은 필수입니다.");
 
-        return new GeneratedCourse(userId, title, description, courseInput,
+        return new GeneratedCourse(userId, pairId, courseType, title, description, courseInput,
                 generationMode, generationMethod, createdBy);
     }
 
@@ -139,17 +146,23 @@ public class GeneratedCourse {
      * Repository 구현체에서 DB 조회 후 호출한다.
      */
     public static GeneratedCourse restore(Long id, Long userId, Long parentCourseId, UUID pairId,
-                                               String title, String description,
+                                               CourseType courseType, String title, String description,
                                                CourseInput courseInput, String generationMode,
                                                String generationMethod, CourseSummary courseSummary,
                                                String comparedWithTravelCourseId, String weightProfile,
                                                String weatherAtGen, ShareInfo shareInfo,
                                                List<GeneratedCourseItem> items,
                                                OffsetDateTime createdAt, String createdBy) {
-        return new GeneratedCourse(id, userId, parentCourseId, pairId, title, description,
+        return new GeneratedCourse(id, userId, parentCourseId, pairId, courseType, title, description,
                 courseInput, generationMode, generationMethod, courseSummary,
                 comparedWithTravelCourseId, weightProfile, weatherAtGen, shareInfo,
                 items, createdAt, createdBy);
+    }
+
+    /** 코스에 방문 스팟 추가 — Aggregate Root를 통해서만 아이템 생성 가능 */
+    public void addItem(Long mapPlaceId, short durationMinutes, short distanceFromPrevM) {
+        short nextSerial = (short) (items.size() + 1);
+        items.add(new GeneratedCourseItem(nextSerial, mapPlaceId, durationMinutes, distanceFromPrevM));
     }
 
     /** @Getter가 생성하는 getItems()를 오버라이드 — 외부 수정 방지 */

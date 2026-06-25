@@ -37,9 +37,9 @@ public class GeneratedCourseItemEntity {
     @Column(name = "serial_num", nullable = false)
     private Short serialNum;
 
-    /** 방문 스팟 TourAPI content_id (FK) */
-    @Column(name = "spot_content_id", nullable = false, length = 20)
-    private String spotContentId;
+    /** mp_map_places.id 참조 — 이를 통해 SPOT/FOOD 원본 테이블까지 탐색 */
+    @Column(name = "map_place_id")
+    private Long mapPlaceId;
 
     /** 예상 도착 시각 */
     @Column(name = "arrival_time")
@@ -86,7 +86,7 @@ public class GeneratedCourseItemEntity {
         GeneratedCourseItemEntity entity = new GeneratedCourseItemEntity();
         entity.course = courseEntity;
         entity.serialNum = item.getSerialNum();
-        entity.spotContentId = item.getSpotContentId();
+        entity.mapPlaceId = item.getMapPlaceId();
         entity.arrivalTime = item.getArrivalTime();
         entity.durationMinutes = item.getDurationMinutes();
         entity.expectedCost = item.getExpectedCost();
@@ -96,7 +96,7 @@ public class GeneratedCourseItemEntity {
         entity.warningMessage = item.getWeatherWarning() != null ? item.getWeatherWarning().message() : null;
         entity.createAudit = CreateAudit.now(courseEntity.getCreateAudit() != null
                 ? courseEntity.getCreateAudit().getCreatedBy() : null);
-        entity.updateAudit = UpdateAudit.empty();
+        entity.updateAudit = UpdateAudit.now();
         return entity;
     }
 
@@ -111,7 +111,7 @@ public class GeneratedCourseItemEntity {
                 id,
                 course != null ? course.getId() : null,
                 serialNum,
-                spotContentId,
+                mapPlaceId,
                 arrivalTime,
                 durationMinutes,
                 expectedCost,
