@@ -18,10 +18,8 @@ public class UpdateAudit {
 
     protected UpdateAudit() {}
 
-    public static UpdateAudit now() {
-        UpdateAudit a = new UpdateAudit();
-        a.updatedAt = OffsetDateTime.now();
-        return a;
+    public static UpdateAudit empty() {
+        return new UpdateAudit();
     }
 
     public void touch(String updatedBy) {

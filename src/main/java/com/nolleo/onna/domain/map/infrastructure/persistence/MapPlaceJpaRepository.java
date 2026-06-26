@@ -8,7 +8,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Long> {
@@ -25,40 +24,4 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
     );
 
     Optional<MapPlaceEntity> findByPlaceTypeAndOriginalId(PlaceType placeType, String originalId);
-
-    @Query(value = """
-            SELECT * FROM mp_map_places
-            WHERE is_active = true
-            AND (:district IS NULL OR district = :district)
-            ORDER BY geog <-> ST_MakePoint(:lon, :lat)::geography
-            """, nativeQuery = true)
-    List<MapPlaceEntity> findNearbyByDistrict(
-            @Param("district") String district,
-            @Param("lat") double lat,
-            @Param("lon") double lon
-    );
-
-    @Query(value = """
-            SELECT * FROM mp_map_places
-            WHERE id IN (:ids)
-            ORDER BY geog <-> ST_MakePoint(:lon, :lat)::geography
-            """, nativeQuery = true)
-    List<MapPlaceEntity> findByIdsOrderByDistance(
-            @Param("ids") List<Long> ids,
-            @Param("lat") double lat,
-            @Param("lon") double lon
-    );
-
-    /** 장소 목록을 distance 순으로 정렬하면서 각 장소까지의 거리(m)도 함께 반환 — [id, distanceMeters] */
-    @Query(value = """
-            SELECT id, ST_Distance(geog, ST_MakePoint(:lon, :lat)::geography) AS distance_m
-            FROM mp_map_places
-            WHERE id IN (:ids)
-            ORDER BY distance_m
-            """, nativeQuery = true)
-    List<Object[]> findByIdsWithDistanceFromPoint(
-            @Param("ids") List<Long> ids,
-            @Param("lat") double lat,
-            @Param("lon") double lon
-    );
 }
