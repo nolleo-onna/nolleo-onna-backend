@@ -1,11 +1,7 @@
 package com.nolleo.onna.domain.generatedcourse.presentation.dto.response;
 
 import com.nolleo.onna.domain.generatedcourse.domain.model.GeneratedCourse;
-import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseType;
-import com.nolleo.onna.domain.map.domain.model.MapPlace;
 import io.swagger.v3.oas.annotations.media.Schema;
-
-import java.util.Map;
 
 import java.util.List;
 
@@ -17,9 +13,6 @@ public record CourseResponse(
 
         @Schema(description = "재생성 시 원본 코스 ID (최초 생성이면 null)", example = "null")
         Long parentCourseId,
-
-        @Schema(description = "코스 타입 (ACTIVE/CULTURE/FOOD_TOUR)", example = "CULTURE")
-        CourseType courseType,
 
         @Schema(description = "생성 모드 (최초: GENERATED, 재생성: REGENERATED)", example = "GENERATED")
         String generationMode,
@@ -39,28 +32,16 @@ public record CourseResponse(
         @Schema(description = "방문 스팟 목록 (순서대로)")
         List<CourseItemResponse> items
 ) {
-    public static CourseResponse from(GeneratedCourse course, Map<Long, MapPlace> placeById) {
-        int computedMinutes = course.getItems().stream()
-                .mapToInt(item -> item.getDurationMinutes() != null ? item.getDurationMinutes() : 0)
-                .sum();
-
-        Integer totalMinutes = (course.getCourseSummary() != null && course.getCourseSummary().totalMinutes() != null)
-                ? course.getCourseSummary().totalMinutes()
-                : computedMinutes;
-
+    public static CourseResponse from(GeneratedCourse course) {
         return new CourseResponse(
                 course.getId(),
                 course.getParentCourseId(),
-                course.getCourseType(),
                 course.getGenerationMode(),
                 course.getTitle(),
                 course.getDescription(),
                 course.getCourseSummary() != null ? course.getCourseSummary().totalCost() : null,
-                totalMinutes,
-                course.getItems().stream()
-                        .map(item -> CourseItemResponse.from(item,
-                                item.getMapPlaceId() != null ? placeById.get(item.getMapPlaceId()) : null))
-                        .toList()
+                course.getCourseSummary() != null ? course.getCourseSummary().totalMinutes() : null,
+                course.getItems().stream().map(CourseItemResponse::from).toList()
         );
     }
 }
