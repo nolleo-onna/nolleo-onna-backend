@@ -26,12 +26,6 @@ public interface MapPlaceRepository {
     /** 지정 ID 목록의 장소를 distance 순 정렬하면서 각 장소까지의 거리(m)를 id → distance 맵으로 반환 */
     Map<Long, Integer> findDistancesFromPoint(List<Long> ids, double lat, double lon);
 
-    /** 두 장소 간 직선 거리 (미터) */
-    int distanceMetersBetween(Long id1, Long id2);
-
-    /** 기준점 (lat, lon) 에서 지정 장소까지의 직선 거리 (미터) */
-    int distanceMetersFromPoint(double lat, double lon, Long id);
-
     /** 구·카테고리·예산 조건에 맞는 활성 장소 페이징 목록 */
     Page<MapPlace> findByFilterPaged(String district, PlaceCategory category, Integer maxBudget, Pageable pageable);
 

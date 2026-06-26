@@ -62,18 +62,6 @@ public class MapPlaceRepositoryImpl implements MapPlaceRepository {
     }
 
     @Override
-    public int distanceMetersBetween(Long id1, Long id2) {
-        Double result = jpaRepository.distanceMetersBetween(id1, id2);
-        return result != null ? result.intValue() : 0;
-    }
-
-    @Override
-    public int distanceMetersFromPoint(double lat, double lon, Long id) {
-        Double result = jpaRepository.distanceMetersFromPoint(lat, lon, id);
-        return result != null ? result.intValue() : 0;
-    }
-
-    @Override
     public Optional<MapPlace> findById(Long id) {
         return jpaRepository.findById(id).map(MapPlaceEntity::toDomain);
     }
