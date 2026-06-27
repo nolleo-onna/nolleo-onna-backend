@@ -5,6 +5,8 @@ import com.nolleo.onna.domain.map.application.service.MapQueryService;
 import com.nolleo.onna.domain.map.domain.model.vo.PlaceCategory;
 import com.nolleo.onna.domain.map.presentation.dto.response.MapMarkerResponse;
 import com.nolleo.onna.domain.map.presentation.dto.response.MapPlaceResponse;
+import com.nolleo.onna.domain.review.application.service.RatingCacheService;
+import com.nolleo.onna.domain.review.presentation.dto.response.RatingResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,6 +26,7 @@ import java.util.List;
 public class MapController {
 
     private final MapQueryService mapQueryService;
+    private final RatingCacheService ratingCacheService;
 
     @GetMapping("/markers")
     @Operation(
@@ -52,5 +55,16 @@ public class MapController {
     ) {
         return ApiResponseDto.success(200, "지도 장소 목록 조회 성공",
                 mapQueryService.getMapPlaces(district, category, maxBudget, pageable));
+    }
+
+    @GetMapping("/places/{id}/rating")
+    @Operation(
+            summary = "장소 평균 평점 조회",
+            description = "MapPlace의 평균 평점과 리뷰 수를 반환합니다. Redis 캐시를 우선 조회하며, 캐시 미스 시 DB에서 계산합니다."
+    )
+    public ResponseEntity<ApiResponseDto<RatingResponse>> getPlaceRating(
+            @Parameter(description = "MapPlace ID") @PathVariable Long id
+    ) {
+        return ApiResponseDto.success(200, "평점 조회 성공", ratingCacheService.getRating(id));
     }
 }
