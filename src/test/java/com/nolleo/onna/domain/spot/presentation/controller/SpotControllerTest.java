@@ -79,7 +79,7 @@ class SpotControllerTest {
                 "https://example.com/img.jpg", null,
                 "관광지", null, null, "26", "26350",
                 "051-000-0000", null, "부산광역시 해운대구", null, "48094",
-                "해운대 해수욕장 소개글", true,
+                "해운대 해수욕장 소개글", null, true,
                 List.of(),
                 null, null, null, null
         );
