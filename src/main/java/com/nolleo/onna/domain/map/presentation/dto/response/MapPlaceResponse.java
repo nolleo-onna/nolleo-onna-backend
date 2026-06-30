@@ -43,7 +43,13 @@ public record MapPlaceResponse(
         Integer minPrice,
 
         @Schema(description = "무료 여부", example = "false")
-        boolean free
+        boolean free,
+
+        @Schema(description = "평균 평점 (0.00~5.00). 리뷰가 없으면 0.00", example = "4.30")
+        BigDecimal avgRating,
+
+        @Schema(description = "리뷰 수", example = "42")
+        long reviewCount
 
 ) {
     public static MapPlaceResponse from(MapPlace mapPlace) {
@@ -58,7 +64,9 @@ public record MapPlaceResponse(
                 mapPlace.getLatitude(),
                 mapPlace.getImageUrl(),
                 mapPlace.getMinPrice(),
-                mapPlace.isFree()
+                mapPlace.isFree(),
+                mapPlace.getAvgRating(),
+                mapPlace.getReviewCount()
         );
     }
 }

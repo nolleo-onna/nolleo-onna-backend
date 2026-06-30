@@ -46,6 +46,7 @@ class ReviewCommandServiceTest {
 
         // then
         verify(reviewRepository, times(1)).save(any(Review.class));
+        verify(mapPlaceRepository, times(1)).incrementRating(mapPlaceId, rating);
         verify(ratingCacheService, times(1)).updateCacheOnNewReview(mapPlaceId, rating);
     }
 
@@ -63,6 +64,7 @@ class ReviewCommandServiceTest {
                         .isEqualTo(ReviewErrorCode.MAP_PLACE_NOT_FOUND));
 
         verify(reviewRepository, never()).save(any());
+        verify(mapPlaceRepository, never()).incrementRating(any(), anyInt());
         verify(ratingCacheService, never()).updateCacheOnNewReview(any(), anyInt());
     }
 
@@ -79,9 +81,10 @@ class ReviewCommandServiceTest {
         // when
         reviewCommandService.createReview(1L, mapPlaceId, rating);
 
-        // then — 저장 후 캐시 갱신 순서 확인
-        var inOrder = inOrder(reviewRepository, ratingCacheService);
+        // then — 저장 → DB 증분 → 캐시 갱신 순서 확인
+        var inOrder = inOrder(reviewRepository, mapPlaceRepository, ratingCacheService);
         inOrder.verify(reviewRepository).save(any(Review.class));
+        inOrder.verify(mapPlaceRepository).incrementRating(mapPlaceId, rating);
         inOrder.verify(ratingCacheService).updateCacheOnNewReview(mapPlaceId, rating);
     }
 }

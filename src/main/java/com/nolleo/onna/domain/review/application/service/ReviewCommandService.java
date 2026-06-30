@@ -23,6 +23,7 @@ public class ReviewCommandService {
                 .orElseThrow(() -> new BusinessException(ReviewErrorCode.MAP_PLACE_NOT_FOUND));
 
         reviewRepository.save(new Review(null, mapPlaceId, userId, rating, null));
+        mapPlaceRepository.incrementRating(mapPlaceId, rating);
         ratingCacheService.updateCacheOnNewReview(mapPlaceId, rating);
     }
 }

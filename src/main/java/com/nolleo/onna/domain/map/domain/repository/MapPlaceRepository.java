@@ -40,4 +40,10 @@ public interface MapPlaceRepository {
 
     /** 장소 저장 (placeType + originalId 기준 upsert) */
     MapPlace save(MapPlace mapPlace);
+
+    /** 구별 활성 장소 수 — category·maxBudget 필터 선택 적용. 반환: district → count */
+    Map<String, Long> countByDistrict(PlaceCategory category, Integer maxBudget);
+
+    /** 리뷰 등록 시 avg_rating·review_count 증분 업데이트 */
+    void incrementRating(Long mapPlaceId, int rating);
 }
