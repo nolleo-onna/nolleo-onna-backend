@@ -62,6 +62,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/map/**").permitAll()
                         .requestMatchers("/api/v1/spots/**").permitAll()
                         .requestMatchers("/api/v1/food/**").permitAll()
+                        // 날씨·혼잡도 — 비로그인 사용자도 접근 가능
+                        .requestMatchers("/api/v1/external/**").permitAll()
                         // 재발급은 access 없이 refresh 쿠키로 동작 → permitAll
                         .requestMatchers("/api/v1/auth/refresh").permitAll()
                         // me/logout 등 나머지는 인증 필요
