@@ -61,7 +61,7 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
     );
 
     /** 리뷰 등록 시 avg_rating·review_count 증분 업데이트 */
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query(value = """
             UPDATE mp_map_places
             SET review_count = review_count + 1,

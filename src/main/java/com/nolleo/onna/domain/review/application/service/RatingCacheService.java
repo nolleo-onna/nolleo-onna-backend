@@ -55,7 +55,7 @@ public class RatingCacheService {
             long   oldCount = Long.parseLong(countStr);
             double oldAvg   = Double.parseDouble(avgStr);
             long   newCount = oldCount + 1;
-            double newAvg   = (oldAvg * oldCount + newRating) / newCount;
+            double newAvg   = Math.round((oldAvg * oldCount + newRating) / newCount * 100.0) / 100.0;
 
             redisTemplate.opsForHash().put(key, FIELD_AVG,   String.valueOf(newAvg));
             redisTemplate.opsForHash().put(key, FIELD_COUNT, String.valueOf(newCount));
@@ -76,7 +76,7 @@ public class RatingCacheService {
     }
 
     private RatingResponse loadFromDb(Long mapPlaceId) {
-        double avg   = reviewRepository.calculateAvgRating(mapPlaceId);
+        double avg   = Math.round(reviewRepository.calculateAvgRating(mapPlaceId) * 100.0) / 100.0;
         long   count = reviewRepository.countByMapPlaceId(mapPlaceId);
         return new RatingResponse(avg, count);
     }
