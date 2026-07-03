@@ -24,7 +24,7 @@ public class WeatherScheduler {
     private final WeatherApiClient weatherApiClient;
     private final WeatherCacheService weatherCacheService;
 
-    @Scheduled(cron = "0 0 * * * *")
+    @Scheduled(cron = "0 15 * * * *")
     public void refreshAll() {
         log.info("날씨 실황 캐시 갱신 시작");
         List<BusanDistrict> failed = fetchAll(List.of(BusanDistrict.values()));

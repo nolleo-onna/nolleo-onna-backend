@@ -14,7 +14,7 @@ import java.util.Optional;
 /**
  * 날씨 정보 Redis 캐시 저장/조회.
  * key: weather:{district} (예: weather:해운대구)
- * TTL: 3시간
+ * TTL: 2시간
  */
 @Slf4j
 @Service
@@ -22,7 +22,7 @@ import java.util.Optional;
 public class WeatherCacheService {
 
     private static final String KEY_PREFIX = "weather:";
-    private static final Duration TTL = Duration.ofHours(1);
+    private static final Duration TTL = Duration.ofHours(2);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
