@@ -81,6 +81,33 @@ public class RatingCacheService {
         return new RatingResponse(avg, count);
     }
 
+    /**
+     * 리뷰 수정 시 Redis 캐시를 증분 방식으로 갱신.
+     * avg = (old_avg * count - oldRating + newRating) / count
+     * 캐시 미스 시 DB에서 전체 재계산.
+     */
+    public void updateCacheOnReviewUpdate(Long mapPlaceId, int oldRating, int newRating) {
+        try {
+            String key      = buildKey(mapPlaceId);
+            String avgStr   = (String) redisTemplate.opsForHash().get(key, FIELD_AVG);
+            String countStr = (String) redisTemplate.opsForHash().get(key, FIELD_COUNT);
+
+            if (avgStr == null || countStr == null) {
+                refreshCache(mapPlaceId, key);
+                return;
+            }
+
+            long   count  = Long.parseLong(countStr);
+            double oldAvg = Double.parseDouble(avgStr);
+            double newAvg = count == 0 ? 0
+                    : Math.round((oldAvg * count - oldRating + newRating) / count * 100.0) / 100.0;
+
+            redisTemplate.opsForHash().put(key, FIELD_AVG, String.valueOf(newAvg));
+        } catch (Exception e) {
+            log.warn("Redis 캐시 갱신 실패(수정) - mapPlaceId={}", mapPlaceId, e);
+        }
+    }
+
     private String buildKey(Long mapPlaceId) {
         return KEY_PREFIX + mapPlaceId + KEY_SUFFIX;
     }

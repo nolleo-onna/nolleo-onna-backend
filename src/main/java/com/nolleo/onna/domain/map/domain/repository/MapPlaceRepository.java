@@ -46,4 +46,7 @@ public interface MapPlaceRepository {
 
     /** 리뷰 등록 시 avg_rating·review_count 증분 업데이트 */
     void incrementRating(Long mapPlaceId, int rating);
+
+    /** 리뷰 수정 시 avg_rating만 재계산 (review_count 변동 없음) */
+    void updateAvgRating(Long mapPlaceId, int oldRating, int newRating);
 }

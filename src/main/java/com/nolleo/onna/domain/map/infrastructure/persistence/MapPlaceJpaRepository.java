@@ -70,6 +70,18 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
             """, nativeQuery = true)
     void incrementRating(@Param("id") Long id, @Param("rating") int rating);
 
+    /** 리뷰 수정 시 avg_rating만 재계산 (review_count 변동 없음) */
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            UPDATE mp_map_places
+            SET avg_rating = CASE
+                WHEN review_count = 0 THEN 0
+                ELSE ROUND((avg_rating * review_count - CAST(:oldRating AS NUMERIC) + CAST(:newRating AS NUMERIC)) / review_count, 2)
+            END
+            WHERE id = :id
+            """, nativeQuery = true)
+    void updateAvgRating(@Param("id") Long id, @Param("oldRating") int oldRating, @Param("newRating") int newRating);
+
     /** 장소 목록을 distance 순으로 정렬하면서 각 장소까지의 거리(m)도 함께 반환 — [id, distanceMeters] */
     @Query(value = """
             SELECT id, ST_Distance(geog, ST_MakePoint(:lon, :lat)::geography) AS distance_m
