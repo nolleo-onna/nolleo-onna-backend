@@ -17,6 +17,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -77,7 +78,9 @@ public class MapPlaceSyncService {
                 null,
                 minPrice,
                 minPrice != null && minPrice == 0,
-                food.isActive()
+                food.isActive(),
+                BigDecimal.ZERO,
+                0L
         );
         mapPlaceRepository.save(mapPlace);
     }
@@ -101,7 +104,9 @@ public class MapPlaceSyncService {
                 spot.getFirstImage(),
                 minPrice,
                 minPrice != null && minPrice == 0,
-                spot.isActive()
+                spot.isActive(),
+                BigDecimal.ZERO,
+                0L
         );
         mapPlaceRepository.save(mapPlace);
     }

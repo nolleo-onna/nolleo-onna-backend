@@ -3,12 +3,17 @@ package com.nolleo.onna.domain.map.presentation.controller;
 import com.nolleo.onna.common.response.ApiResponseDto;
 import com.nolleo.onna.domain.map.application.service.MapQueryService;
 import com.nolleo.onna.domain.map.domain.model.vo.PlaceCategory;
+import com.nolleo.onna.domain.map.presentation.dto.response.DistrictCountResponse;
 import com.nolleo.onna.domain.map.presentation.dto.response.MapMarkerResponse;
 import com.nolleo.onna.domain.map.presentation.dto.response.MapPlaceResponse;
 import com.nolleo.onna.domain.review.application.service.RatingCacheService;
 import com.nolleo.onna.domain.review.presentation.dto.response.RatingResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -27,6 +32,22 @@ public class MapController {
 
     private final MapQueryService mapQueryService;
     private final RatingCacheService ratingCacheService;
+
+    @GetMapping("/district-counts")
+    @Operation(
+            summary = "구별 장소 수 조회",
+            description = "각 구(district)에 속한 활성 장소 수를 반환합니다. category/maxBudget 으로 필터링 가능합니다."
+    )
+    @ApiResponse(responseCode = "200", description = "구별 장소 수 조회 성공",
+            content = @Content(mediaType = "application/json",
+                    array = @ArraySchema(schema = @Schema(implementation = DistrictCountResponse.class))))
+    public ResponseEntity<ApiResponseDto<List<DistrictCountResponse>>> getDistrictCounts(
+            @Parameter(description = "카테고리 코드 필터 (FD/VE/NA/HS/EX/LS). null이면 전체") @RequestParam(required = false) PlaceCategory category,
+            @Parameter(description = "최대 예산(원). null이면 제한 없음") @RequestParam(required = false) Integer maxBudget
+    ) {
+        return ApiResponseDto.success(200, "구별 장소 수 조회 성공",
+                mapQueryService.getDistrictCounts(category, maxBudget));
+    }
 
     @GetMapping("/markers")
     @Operation(

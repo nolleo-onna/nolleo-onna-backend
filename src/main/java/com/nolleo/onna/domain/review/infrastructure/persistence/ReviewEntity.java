@@ -49,6 +49,10 @@ public class ReviewEntity {
         );
     }
 
+    public void updateRating(int newRating) {
+        this.rating = newRating;
+    }
+
     public Review toDomain() {
         return new Review(id, mapPlaceId, userId, rating, createdAt);
     }

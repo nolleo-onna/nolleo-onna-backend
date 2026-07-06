@@ -61,6 +61,12 @@ public class MapPlaceEntity {
     @Column(name = "is_active", nullable = false)
     private boolean active;
 
+    @Column(name = "avg_rating", precision = 4, scale = 2, nullable = false)
+    private BigDecimal avgRating;
+
+    @Column(name = "review_count", nullable = false)
+    private long reviewCount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -81,6 +87,8 @@ public class MapPlaceEntity {
             mapPlace.getMinPrice(),
             mapPlace.isFree(),
             mapPlace.isActive(),
+            mapPlace.getAvgRating(),
+            mapPlace.getReviewCount(),
             OffsetDateTime.now(),
             OffsetDateTime.now()
         );
@@ -101,6 +109,7 @@ public class MapPlaceEntity {
 
     public MapPlace toDomain() {
         return new MapPlace(id, placeType, originalId, name, district, category,
-                            longitude, latitude, imageUrl, minPrice, free, active);
+                            longitude, latitude, imageUrl, minPrice, free, active,
+                            avgRating, reviewCount);
     }
 }

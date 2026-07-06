@@ -5,6 +5,7 @@ import com.nolleo.onna.domain.map.domain.model.vo.PlaceType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -25,6 +26,16 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
     );
 
     Optional<MapPlaceEntity> findByPlaceTypeAndOriginalId(PlaceType placeType, String originalId);
+
+    @Query("SELECT e.district, COUNT(e) FROM MapPlaceEntity e WHERE e.active = true " +
+           "AND e.district IS NOT NULL " +
+           "AND (:category IS NULL OR e.category = :category) " +
+           "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice IS NULL OR e.minPrice <= :maxBudget) " +
+           "GROUP BY e.district ORDER BY e.district")
+    List<Object[]> countGroupByDistrict(
+        @Param("category") PlaceCategory category,
+        @Param("maxBudget") Integer maxBudget
+    );
 
     @Query(value = """
             SELECT * FROM mp_map_places
@@ -48,6 +59,28 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
             @Param("lat") double lat,
             @Param("lon") double lon
     );
+
+    /** 리뷰 등록 시 avg_rating·review_count 증분 업데이트 */
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            UPDATE mp_map_places
+            SET review_count = review_count + 1,
+                avg_rating   = ROUND((avg_rating * review_count + CAST(:rating AS NUMERIC)) / (review_count + 1), 2)
+            WHERE id = :id
+            """, nativeQuery = true)
+    void incrementRating(@Param("id") Long id, @Param("rating") int rating);
+
+    /** 리뷰 수정 시 avg_rating만 재계산 (review_count 변동 없음) */
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            UPDATE mp_map_places
+            SET avg_rating = CASE
+                WHEN review_count = 0 THEN 0
+                ELSE ROUND((avg_rating * review_count - CAST(:oldRating AS NUMERIC) + CAST(:newRating AS NUMERIC)) / review_count, 2)
+            END
+            WHERE id = :id
+            """, nativeQuery = true)
+    void updateAvgRating(@Param("id") Long id, @Param("oldRating") int oldRating, @Param("newRating") int newRating);
 
     /** 장소 목록을 distance 순으로 정렬하면서 각 장소까지의 거리(m)도 함께 반환 — [id, distanceMeters] */
     @Query(value = """

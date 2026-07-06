@@ -104,7 +104,7 @@ class RatingCacheServiceTest {
     }
 
     @Test
-    @DisplayName("캐시가 있으면 신규 리뷰 등록 시 증분 방식으로 평점을 갱신한다")
+    @DisplayName("캐시가 있으면 신규 리뷰 등록 시 증분 방식으로 평점을 소수 2자리로 반올림해 갱신한다")
     void updateCacheOnNewReview_updatesIncrementally_whenCacheExists() {
         // given — 기존: 평균 4.0, 리뷰 10개
         given(hashOps.get(REDIS_KEY, "avg")).willReturn("4.0");
@@ -113,10 +113,26 @@ class RatingCacheServiceTest {
         // when — 새 리뷰 5점 등록
         ratingCacheService.updateCacheOnNewReview(MAP_PLACE_ID, 5);
 
-        // then — (4.0 * 10 + 5) / 11 ≈ 4.090909...
-        double expectedAvg = (4.0 * 10 + 5) / 11.0;
-        verify(hashOps).put(eq(REDIS_KEY), eq("avg"), eq(String.valueOf(expectedAvg)));
+        // then — (4.0 * 10 + 5) / 11 = 4.090909... → ROUND(2) = 4.09
+        // DB avg_rating(NUMERIC(4,2))과 동일한 정밀도로 맞춰 두 엔드포인트 간 불일치를 방지한다
+        verify(hashOps).put(eq(REDIS_KEY), eq("avg"), eq("4.09"));
         verify(hashOps).put(eq(REDIS_KEY), eq("count"), eq("11"));
+    }
+
+    @Test
+    @DisplayName("DB fallback 시 평점을 소수 2자리로 반올림해 반환한다")
+    void getRating_roundsToTwoDecimalPlaces_whenLoadedFromDb() {
+        // given — AVG() 결과가 무한소수인 경우
+        given(hashOps.get(REDIS_KEY, "avg")).willReturn(null);
+        given(hashOps.get(REDIS_KEY, "count")).willReturn(null);
+        given(reviewRepository.calculateAvgRating(MAP_PLACE_ID)).willReturn(4.090909090909091);
+        given(reviewRepository.countByMapPlaceId(MAP_PLACE_ID)).willReturn(11L);
+
+        // when
+        RatingResponse result = ratingCacheService.getRating(MAP_PLACE_ID);
+
+        // then — GET /map/places의 avg_rating(4.09)과 일치해야 한다
+        assertThat(result.avgRating()).isEqualTo(4.09);
     }
 
     @Test

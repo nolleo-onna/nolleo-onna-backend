@@ -10,4 +10,6 @@ public interface ReviewJpaRepository extends JpaRepository<ReviewEntity, Long> {
     double calculateAvgRating(@Param("mapPlaceId") Long mapPlaceId);
 
     long countByMapPlaceId(Long mapPlaceId);
+
+    java.util.Optional<ReviewEntity> findByUserIdAndMapPlaceId(Long userId, Long mapPlaceId);
 }

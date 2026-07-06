@@ -88,4 +88,25 @@ public class MapPlaceRepositoryImpl implements MapPlaceRepository {
                 })
                 .orElseGet(() -> jpaRepository.save(MapPlaceEntity.from(mapPlace)).toDomain());
     }
+
+    @Override
+    public Map<String, Long> countByDistrict(PlaceCategory category, Integer maxBudget) {
+        return jpaRepository.countGroupByDistrict(category, maxBudget).stream()
+                .collect(Collectors.toMap(
+                        row -> (String) row[0],
+                        row -> (Long) row[1],
+                        (a, b) -> a,
+                        LinkedHashMap::new
+                ));
+    }
+
+    @Override
+    public void incrementRating(Long mapPlaceId, int rating) {
+        jpaRepository.incrementRating(mapPlaceId, rating);
+    }
+
+    @Override
+    public void updateAvgRating(Long mapPlaceId, int oldRating, int newRating) {
+        jpaRepository.updateAvgRating(mapPlaceId, oldRating, newRating);
+    }
 }
