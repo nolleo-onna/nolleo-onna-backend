@@ -1,16 +1,17 @@
 package com.nolleo.onna.domain.external.congestion;
 
+import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.external.BusanDistrict;
 import com.nolleo.onna.domain.external.congestion.dto.CongestionAttractionInfo;
 import com.nolleo.onna.domain.external.congestion.dto.CongestionInfo;
 import com.nolleo.onna.domain.external.congestion.dto.CongestionResponse;
+import com.nolleo.onna.domain.external.exception.ExternalErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -21,12 +22,6 @@ public class CongestionQueryService {
     /** 맵 표시용: 부산 전체 지역 혼잡도 목록 */
     public List<CongestionResponse> getAllDistricts() {
         return Arrays.stream(BusanDistrict.values())
-                .collect(Collectors.toMap(
-                        d -> d.areaCd + ":" + d.signguCd,
-                        d -> d,
-                        (a, b) -> a
-                ))
-                .values().stream()
                 .map(d -> {
                     CongestionInfo info = congestionCacheService
                             .get(d.areaCd, d.signguCd)
@@ -41,7 +36,7 @@ public class CongestionQueryService {
         BusanDistrict district = Arrays.stream(BusanDistrict.values())
                 .filter(d -> d.districtName.equals(districtName))
                 .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("지원하지 않는 지역입니다: " + districtName));
+                .orElseThrow(() -> new BusinessException(ExternalErrorCode.DISTRICT_NOT_FOUND));
         CongestionInfo info = congestionCacheService
                 .get(district.areaCd, district.signguCd)
                 .orElse(CongestionInfo.empty());
@@ -54,7 +49,7 @@ public class CongestionQueryService {
                                                                    String spotTitle) {
         return congestionCacheService.get(lDongRegnCd, lDongSignguCd)
                 .flatMap(info -> info.attractions().stream()
-                        .filter(a -> a.name().contains(spotTitle) || spotTitle.contains(a.name()))
+                        .filter(a -> a.name().contains(spotTitle))
                         .findFirst());
     }
 
