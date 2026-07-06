@@ -2,8 +2,8 @@ package com.nolleo.onna.domain.external.presentation;
 
 import com.nolleo.onna.common.response.ApiResponseDto;
 import com.nolleo.onna.domain.external.weather.WeatherQueryService;
+import com.nolleo.onna.domain.external.weather.WeatherRefreshService;
 import com.nolleo.onna.domain.external.weather.dto.WeatherResponse;
-import com.nolleo.onna.domain.external.weather.scheduler.WeatherScheduler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,7 +24,7 @@ import java.util.List;
 public class WeatherController {
 
     private final WeatherQueryService weatherQueryService;
-    private final WeatherScheduler weatherScheduler;
+    private final WeatherRefreshService weatherRefreshService;
 
     @GetMapping
     @Operation(
@@ -45,7 +45,7 @@ public class WeatherController {
     @PostMapping("/refresh")
     @Operation(summary = "[테스트용] 날씨 캐시 즉시 갱신", description = "스케줄러를 수동으로 즉시 실행합니다.")
     public ResponseEntity<ApiResponseDto<Object>> refreshWeather() {
-        weatherScheduler.refreshAll();
+        weatherRefreshService.refresh();
         return ApiResponseDto.success(200, "날씨 캐시 갱신 완료", null);
     }
 }

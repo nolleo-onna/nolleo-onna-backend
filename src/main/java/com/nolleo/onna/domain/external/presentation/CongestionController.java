@@ -2,8 +2,8 @@ package com.nolleo.onna.domain.external.presentation;
 
 import com.nolleo.onna.common.response.ApiResponseDto;
 import com.nolleo.onna.domain.external.congestion.CongestionQueryService;
+import com.nolleo.onna.domain.external.congestion.CongestionRefreshService;
 import com.nolleo.onna.domain.external.congestion.dto.CongestionResponse;
-import com.nolleo.onna.domain.external.congestion.scheduler.CongestionScheduler;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -24,7 +24,7 @@ import java.util.List;
 public class CongestionController {
 
     private final CongestionQueryService congestionQueryService;
-    private final CongestionScheduler congestionScheduler;
+    private final CongestionRefreshService congestionRefreshService;
 
     @GetMapping
     @Operation(
@@ -45,7 +45,7 @@ public class CongestionController {
     @PostMapping("/refresh")
     @Operation(summary = "[테스트용] 혼잡도 캐시 즉시 갱신", description = "스케줄러를 수동으로 즉시 실행합니다.")
     public ResponseEntity<ApiResponseDto<Object>> refreshCongestion() {
-        congestionScheduler.refreshAll();
+        congestionRefreshService.refresh();
         return ApiResponseDto.success(200, "혼잡도 캐시 갱신 완료", null);
     }
 }
