@@ -49,8 +49,9 @@ public class CongestionRefreshService {
                 }
             } catch (Exception e) {
                 log.error("혼잡도 캐시 갱신 실패 district={}: {}", district.districtName, e.getMessage());
+            } finally {
+                sleepQuietly(5000);
             }
-            sleepQuietly(5000);
         }
     }
 
