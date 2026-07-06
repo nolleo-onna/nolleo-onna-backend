@@ -4,7 +4,7 @@ import java.util.List;
 
 public record CongestionResponse(
         String district,
-        String rate,
+        double rate,
         String baseYmd,
         List<CongestionAttractionInfo> attractions
 ) {

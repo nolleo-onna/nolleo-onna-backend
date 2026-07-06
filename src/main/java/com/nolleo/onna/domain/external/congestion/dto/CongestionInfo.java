@@ -11,11 +11,11 @@ import java.util.List;
  */
 public record CongestionInfo(
         String districtName,
-        String rate,
+        double rate,
         String baseYmd,
         List<CongestionAttractionInfo> attractions
 ) {
     public static CongestionInfo empty() {
-        return new CongestionInfo("정보없음", "0", "-", List.of());
+        return new CongestionInfo("정보없음", 0.0, "-", List.of());
     }
 }
