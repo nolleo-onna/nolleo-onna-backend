@@ -28,6 +28,8 @@ public class CongestionApiClient {
     private static final String BASE_URL =
             "https://apis.data.go.kr/B551011/TatsCnctrRateService/tatsCnctrRatedList";
 
+    private static final DocumentBuilderFactory FACTORY = DocumentBuilderFactory.newInstance();
+
     @Value("${external.congestion.api-key}")
     private String apiKey;
 
@@ -72,7 +74,7 @@ public class CongestionApiClient {
     }
 
     private List<Map<String, String>> parseXml(String xml) throws Exception {
-        DocumentBuilder builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
+        DocumentBuilder builder = FACTORY.newDocumentBuilder();
         Document doc = builder.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
         NodeList items = doc.getElementsByTagName("item");
 
