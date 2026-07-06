@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -25,12 +26,23 @@ public class CongestionRefreshService {
     public void refresh() {
         log.info("혼잡도 캐시 갱신 시작");
         String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        fetchAll(today);
+
+        List<BusanDistrict> failed = fetchAll(List.of(BusanDistrict.values()), today);
+        if (!failed.isEmpty()) {
+            log.info("혼잡도 캐시 갱신 실패 지역 재시도: {}개", failed.size());
+            sleepQuietly(5000);
+            List<BusanDistrict> stillFailed = fetchAll(failed, today);
+            if (!stillFailed.isEmpty()) {
+                log.warn("혼잡도 캐시 갱신 최종 실패 지역: {}",
+                        stillFailed.stream().map(d -> d.districtName).toList());
+            }
+        }
         log.info("혼잡도 캐시 갱신 완료");
     }
 
-    private void fetchAll(String today) {
-        for (BusanDistrict district : BusanDistrict.values()) {
+    private List<BusanDistrict> fetchAll(List<BusanDistrict> districts, String today) {
+        List<BusanDistrict> failed = new ArrayList<>();
+        for (BusanDistrict district : districts) {
             try {
                 List<Map<String, String>> items =
                         congestionApiClient.fetchCongestion(district.areaCd, district.signguCd);
@@ -49,10 +61,12 @@ public class CongestionRefreshService {
                 }
             } catch (Exception e) {
                 log.error("혼잡도 캐시 갱신 실패 district={}: {}", district.districtName, e.getMessage());
+                failed.add(district);
             } finally {
                 sleepQuietly(5000);
             }
         }
+        return failed;
     }
 
     private CongestionInfo buildCongestionInfo(BusanDistrict district,
