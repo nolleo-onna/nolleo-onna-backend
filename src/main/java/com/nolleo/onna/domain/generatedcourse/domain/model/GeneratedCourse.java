@@ -10,6 +10,8 @@ import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -55,9 +57,6 @@ public class GeneratedCourse {
     /** 추천 가중치 프로필 (JSONB) */
     private final String weightProfile;
 
-    /** 코스 생성 시점 날씨/환경 스냅샷 (JSONB) */
-    private final String weatherAtGen;
-
     /** 공개 공유 상태 묶음 (공개여부·토큰·조회수) */
     private ShareInfo shareInfo;
 
@@ -89,7 +88,6 @@ public class GeneratedCourse {
         this.generationMethod = generationMethod;
         this.comparedWithTravelCourseId = null;
         this.weightProfile = null;
-        this.weatherAtGen = null;
         this.shareInfo = ShareInfo.of(false, null, 0);
         this.items = new ArrayList<>();
         this.createdAt = OffsetDateTime.now();
@@ -101,7 +99,7 @@ public class GeneratedCourse {
                              CourseType courseType, String title, String description,
                              CourseInput courseInput, String generationMode, String generationMethod,
                              CourseSummary courseSummary, String comparedWithTravelCourseId,
-                             String weightProfile, String weatherAtGen, ShareInfo shareInfo,
+                             String weightProfile, ShareInfo shareInfo,
                              List<GeneratedCourseItem> items, OffsetDateTime createdAt,
                              String createdBy) {
         this.id = id;
@@ -117,7 +115,6 @@ public class GeneratedCourse {
         this.courseSummary = courseSummary;
         this.comparedWithTravelCourseId = comparedWithTravelCourseId;
         this.weightProfile = weightProfile;
-        this.weatherAtGen = weatherAtGen;
         this.shareInfo = shareInfo;
         this.items = new ArrayList<>(items);
         this.createdAt = createdAt;
@@ -146,16 +143,15 @@ public class GeneratedCourse {
      * Repository 구현체에서 DB 조회 후 호출한다.
      */
     public static GeneratedCourse restore(Long id, Long userId, Long parentCourseId, UUID pairId,
-                                               CourseType courseType, String title, String description,
-                                               CourseInput courseInput, String generationMode,
-                                               String generationMethod, CourseSummary courseSummary,
-                                               String comparedWithTravelCourseId, String weightProfile,
-                                               String weatherAtGen, ShareInfo shareInfo,
-                                               List<GeneratedCourseItem> items,
-                                               OffsetDateTime createdAt, String createdBy) {
+                                           CourseType courseType, String title, String description,
+                                           CourseInput courseInput, String generationMode,
+                                           String generationMethod, CourseSummary courseSummary,
+                                           String comparedWithTravelCourseId, String weightProfile,
+                                           ShareInfo shareInfo, List<GeneratedCourseItem> items,
+                                           OffsetDateTime createdAt, String createdBy) {
         return new GeneratedCourse(id, userId, parentCourseId, pairId, courseType, title, description,
                 courseInput, generationMode, generationMethod, courseSummary,
-                comparedWithTravelCourseId, weightProfile, weatherAtGen, shareInfo,
+                comparedWithTravelCourseId, weightProfile, shareInfo,
                 items, createdAt, createdBy);
     }
 
@@ -168,5 +164,26 @@ public class GeneratedCourse {
     /** @Getter가 생성하는 getItems()를 오버라이드 — 외부 수정 방지 */
     public List<GeneratedCourseItem> getItems() {
         return Collections.unmodifiableList(items);
+    }
+
+    /**
+     * 코스 전체 예상 소요시간(분)을 반환한다.
+     * CourseSummary에 값이 있으면 우선 사용, 없으면 아이템 체류시간 합산으로 계산.
+     */
+    public int computeTotalMinutes() {
+        if (courseSummary != null && courseSummary.totalMinutes() != null) {
+            return courseSummary.totalMinutes();
+        }
+        return items.stream()
+                .mapToInt(item -> item.getDurationMinutes() != null ? item.getDurationMinutes() : 0)
+                .sum();
+    }
+
+    /** 코스 아이템이 참조하는 mapPlaceId 목록을 반환한다. 장소 일괄 조회 시 사용. */
+    public Set<Long> getMapPlaceIds() {
+        return items.stream()
+                .map(GeneratedCourseItem::getMapPlaceId)
+                .filter(Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
     }
 }
