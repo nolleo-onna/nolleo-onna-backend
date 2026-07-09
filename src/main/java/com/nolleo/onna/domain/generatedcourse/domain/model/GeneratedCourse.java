@@ -54,9 +54,6 @@ public class GeneratedCourse {
     /** 비교 기준 공식 여행코스 ID (TourAPI) */
     private final String comparedWithTravelCourseId;
 
-    /** 추천 가중치 프로필 (JSONB) */
-    private final String weightProfile;
-
     /** 공개 공유 상태 묶음 (공개여부·토큰·조회수) */
     private ShareInfo shareInfo;
 
@@ -87,7 +84,6 @@ public class GeneratedCourse {
         this.generationMode = generationMode;
         this.generationMethod = generationMethod;
         this.comparedWithTravelCourseId = null;
-        this.weightProfile = null;
         this.shareInfo = ShareInfo.of(false, null, 0);
         this.items = new ArrayList<>();
         this.createdAt = OffsetDateTime.now();
@@ -99,7 +95,7 @@ public class GeneratedCourse {
                              CourseType courseType, String title, String description,
                              CourseInput courseInput, String generationMode, String generationMethod,
                              CourseSummary courseSummary, String comparedWithTravelCourseId,
-                             String weightProfile, ShareInfo shareInfo,
+                             ShareInfo shareInfo,
                              List<GeneratedCourseItem> items, OffsetDateTime createdAt,
                              String createdBy) {
         this.id = id;
@@ -114,7 +110,6 @@ public class GeneratedCourse {
         this.generationMethod = generationMethod;
         this.courseSummary = courseSummary;
         this.comparedWithTravelCourseId = comparedWithTravelCourseId;
-        this.weightProfile = weightProfile;
         this.shareInfo = shareInfo;
         this.items = new ArrayList<>(items);
         this.createdAt = createdAt;
@@ -146,12 +141,12 @@ public class GeneratedCourse {
                                            CourseType courseType, String title, String description,
                                            CourseInput courseInput, String generationMode,
                                            String generationMethod, CourseSummary courseSummary,
-                                           String comparedWithTravelCourseId, String weightProfile,
+                                           String comparedWithTravelCourseId,
                                            ShareInfo shareInfo, List<GeneratedCourseItem> items,
                                            OffsetDateTime createdAt, String createdBy) {
         return new GeneratedCourse(id, userId, parentCourseId, pairId, courseType, title, description,
                 courseInput, generationMode, generationMethod, courseSummary,
-                comparedWithTravelCourseId, weightProfile, shareInfo,
+                comparedWithTravelCourseId, shareInfo,
                 items, createdAt, createdBy);
     }
 

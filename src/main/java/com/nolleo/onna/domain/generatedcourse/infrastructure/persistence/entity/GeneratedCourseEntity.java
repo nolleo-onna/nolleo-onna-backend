@@ -14,7 +14,6 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -49,10 +48,6 @@ public class GeneratedCourseEntity {
     @Enumerated(EnumType.STRING)
     @Column(name = "course_type", length = 20)
     private CourseType courseType;
-
-    /** 추천 가중치 프로필 (JSONB) */
-    @Column(name = "weight_profile", columnDefinition = "jsonb")
-    private String weightProfile;
 
     /** 생성 코스명 */
     @Column(name = "title", nullable = false, length = 200)
@@ -163,7 +158,6 @@ public class GeneratedCourseEntity {
         entity.totalMinutes = course.getCourseSummary() != null ? course.getCourseSummary().totalMinutes() : null;
         entity.totalSavings = course.getCourseSummary() != null ? course.getCourseSummary().totalSavings() : null;
         entity.comparedWithTravelCourseId = course.getComparedWithTravelCourseId();
-        entity.weightProfile = course.getWeightProfile();
         entity.isPublic = course.getShareInfo() != null && course.getShareInfo().isPublic();
         entity.shareToken = course.getShareInfo() != null ? course.getShareInfo().shareToken() : null;
         entity.viewCount = course.getShareInfo() != null ? course.getShareInfo().viewCount() : 0;
@@ -193,7 +187,7 @@ public class GeneratedCourseEntity {
                 CourseInput.of(inputSigngu, inputBudget, inputDuration, inputCompanion, inputMood),
                 generationMode, generationMethod,
                 CourseSummary.of(totalCost, totalMinutes, totalSavings),
-                comparedWithTravelCourseId, weightProfile,
+                comparedWithTravelCourseId,
                 ShareInfo.of(isPublic, shareToken, viewCount),
                 domainItems,
                 createAudit != null ? createAudit.getCreatedAt() : null,
