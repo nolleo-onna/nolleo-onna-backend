@@ -1,6 +1,5 @@
 package com.nolleo.onna.domain.generatedcourse.domain.model;
 
-import com.nolleo.onna.domain.generatedcourse.domain.model.vo.WeatherWarning;
 import lombok.Getter;
 
 import java.time.LocalTime;
@@ -39,9 +38,6 @@ public class GeneratedCourseItem {
     /** 타임라인에 표시할 메모 */
     private String notes;
 
-    /** 날씨 경고 정보 묶음 (경고여부·메시지) */
-    private WeatherWarning weatherWarning;
-
     /** 신규 생성용 생성자 — GeneratedCourse.addItem()에서만 호출 */
     GeneratedCourseItem(Short serialNum, Long mapPlaceId,
                         short durationMinutes, short distanceFromPrevM) {
@@ -51,7 +47,6 @@ public class GeneratedCourseItem {
         this.mapPlaceId = mapPlaceId;
         this.durationMinutes = durationMinutes;
         this.distanceFromPrevM = distanceFromPrevM;
-        this.weatherWarning = WeatherWarning.none();
     }
 
     /**
@@ -61,8 +56,7 @@ public class GeneratedCourseItem {
     public static GeneratedCourseItem restore(Long id, Long courseId, Short serialNum,
                                                Long mapPlaceId, LocalTime arrivalTime,
                                                Short durationMinutes, Integer expectedCost,
-                                               Short distanceFromPrevM, String notes,
-                                               WeatherWarning weatherWarning) {
+                                               Short distanceFromPrevM, String notes) {
         GeneratedCourseItem item = new GeneratedCourseItem(serialNum, mapPlaceId,
                 durationMinutes != null ? durationMinutes : 0,
                 distanceFromPrevM != null ? distanceFromPrevM : 0);
@@ -71,7 +65,6 @@ public class GeneratedCourseItem {
         item.arrivalTime = arrivalTime;
         item.expectedCost = expectedCost;
         item.notes = notes;
-        item.weatherWarning = weatherWarning;
         return item;
     }
 }

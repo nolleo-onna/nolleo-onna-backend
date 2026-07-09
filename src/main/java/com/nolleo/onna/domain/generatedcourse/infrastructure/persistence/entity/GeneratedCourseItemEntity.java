@@ -3,7 +3,6 @@ package com.nolleo.onna.domain.generatedcourse.infrastructure.persistence.entity
 import com.nolleo.onna.common.infrastructure.CreateAudit;
 import com.nolleo.onna.common.infrastructure.UpdateAudit;
 import com.nolleo.onna.domain.generatedcourse.domain.model.GeneratedCourseItem;
-import com.nolleo.onna.domain.generatedcourse.domain.model.vo.WeatherWarning;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -61,14 +60,6 @@ public class GeneratedCourseItemEntity {
     @Column(name = "notes", columnDefinition = "TEXT")
     private String notes;
 
-    /** 날씨 위험 경고 여부 */
-    @Column(name = "has_weather_warning", nullable = false)
-    private boolean hasWeatherWarning;
-
-    /** 사용자 노출 날씨 경고 메시지 */
-    @Column(name = "warning_message", columnDefinition = "TEXT")
-    private String warningMessage;
-
     @Embedded
     private CreateAudit createAudit;
 
@@ -92,8 +83,6 @@ public class GeneratedCourseItemEntity {
         entity.expectedCost = item.getExpectedCost();
         entity.distanceFromPrevM = item.getDistanceFromPrevM();
         entity.notes = item.getNotes();
-        entity.hasWeatherWarning = item.getWeatherWarning() != null && item.getWeatherWarning().hasWarning();
-        entity.warningMessage = item.getWeatherWarning() != null ? item.getWeatherWarning().message() : null;
         entity.createAudit = CreateAudit.now(courseEntity.getCreateAudit() != null
                 ? courseEntity.getCreateAudit().getCreatedBy() : null);
         entity.updateAudit = UpdateAudit.now();
@@ -116,8 +105,7 @@ public class GeneratedCourseItemEntity {
                 durationMinutes,
                 expectedCost,
                 distanceFromPrevM,
-                notes,
-                hasWeatherWarning ? WeatherWarning.of(warningMessage) : WeatherWarning.none()
+                notes
         );
     }
 }

@@ -14,8 +14,6 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +51,6 @@ public class GeneratedCourseEntity {
     private CourseType courseType;
 
     /** 추천 가중치 프로필 (JSONB) */
-    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "weight_profile", columnDefinition = "jsonb")
     private String weightProfile;
 
@@ -109,11 +106,6 @@ public class GeneratedCourseEntity {
     /** 비교 기준 공식 여행코스 ID (TourAPI) */
     @Column(name = "compared_with_travel_course_id", length = 20)
     private String comparedWithTravelCourseId;
-
-    /** 코스 생성 시점 날씨/환경 스냅샷 (JSONB) */
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "weather_at_gen", columnDefinition = "jsonb")
-    private String weatherAtGen;
 
     /** 코스 공개 여부 */
     @Column(name = "is_public", nullable = false)
@@ -172,7 +164,6 @@ public class GeneratedCourseEntity {
         entity.totalSavings = course.getCourseSummary() != null ? course.getCourseSummary().totalSavings() : null;
         entity.comparedWithTravelCourseId = course.getComparedWithTravelCourseId();
         entity.weightProfile = course.getWeightProfile();
-        entity.weatherAtGen = course.getWeatherAtGen();
         entity.isPublic = course.getShareInfo() != null && course.getShareInfo().isPublic();
         entity.shareToken = course.getShareInfo() != null ? course.getShareInfo().shareToken() : null;
         entity.viewCount = course.getShareInfo() != null ? course.getShareInfo().viewCount() : 0;
@@ -202,7 +193,7 @@ public class GeneratedCourseEntity {
                 CourseInput.of(inputSigngu, inputBudget, inputDuration, inputCompanion, inputMood),
                 generationMode, generationMethod,
                 CourseSummary.of(totalCost, totalMinutes, totalSavings),
-                comparedWithTravelCourseId, weightProfile, weatherAtGen,
+                comparedWithTravelCourseId, weightProfile,
                 ShareInfo.of(isPublic, shareToken, viewCount),
                 domainItems,
                 createAudit != null ? createAudit.getCreatedAt() : null,
