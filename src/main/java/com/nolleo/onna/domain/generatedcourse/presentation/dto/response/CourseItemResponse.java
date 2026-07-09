@@ -42,16 +42,9 @@ public record CourseItemResponse(
         Short durationMinutes,
 
         @Schema(description = "예상 방문 비용 (원) — 가격 데이터 확보 후 제공 예정")
-        Integer expectedCost,
-
-        @Schema(description = "날씨 위험 경고 여부", example = "false")
-        boolean hasWeatherWarning,
-
-        @Schema(description = "날씨 위험 경고 메시지 (hasWeatherWarning=true 일 때만 존재)")
-        String warningMessage
+        Integer expectedCost
 
 ) {
-    /** 장소 정보가 있을 때 사용하는 팩토리 메서드 */
     public static CourseItemResponse from(GeneratedCourseItem item, MapPlace place) {
         return new CourseItemResponse(
                 item.getSerialNum(),
@@ -64,9 +57,7 @@ public record CourseItemResponse(
                 place != null ? place.getOriginalId() : null,
                 item.getDistanceFromPrevM(),
                 item.getDurationMinutes(),
-                item.getExpectedCost(),
-                item.getWeatherWarning() != null && item.getWeatherWarning().hasWarning(),
-                item.getWeatherWarning() != null ? item.getWeatherWarning().message() : null
+                item.getExpectedCost()
         );
     }
 }

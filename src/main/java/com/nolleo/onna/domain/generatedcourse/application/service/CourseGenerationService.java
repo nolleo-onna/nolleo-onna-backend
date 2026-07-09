@@ -54,8 +54,8 @@ public class CourseGenerationService {
 
             GeneratedCourse course = GeneratedCourse.create(
                     command.userId(), pairId, type,
-                    buildTitle(command.signgu(), type, command.duration()),
-                    buildDescription(type, command.companion()),
+                    type.buildTitle(command.signgu(), command.duration()),
+                    type.buildDescription(command.companion()),
                     courseInput, "default", "form",
                     String.valueOf(command.userId()));
 
@@ -90,10 +90,9 @@ public class CourseGenerationService {
                 : courses;
 
         // 코스 아이템의 mapPlaceId 목록으로 장소 정보 일괄 조회
-        Set<Long> mapPlaceIds = new HashSet<>();
-        filtered.forEach(c -> c.getItems().forEach(item -> {
-            if (item.getMapPlaceId() != null) mapPlaceIds.add(item.getMapPlaceId());
-        }));
+        Set<Long> mapPlaceIds = filtered.stream()
+                .flatMap(c -> c.getMapPlaceIds().stream())
+                .collect(java.util.stream.Collectors.toSet());
 
         Map<Long, MapPlace> placeById = mapPlaceRepository.findAllByIds(mapPlaceIds);
 
@@ -104,23 +103,4 @@ public class CourseGenerationService {
         return new PairCourseResponse(pairId, courseResponses);
     }
 
-    // ── private ──────────────────────────────────────────────────────────────
-
-    private static String buildTitle(String signgu, CourseType type, String duration) {
-        String durationLabel = "FULL_DAY".equalsIgnoreCase(duration) ? "하루" : "반나절";
-        String typeLabel = switch (type) {
-            case ACTIVE    -> "액티브";
-            case CULTURE   -> "문화 탐방";
-            case FOOD_TOUR -> "맛집 투어";
-        };
-        return signgu + " " + typeLabel + " " + durationLabel + " 코스";
-    }
-
-    private static String buildDescription(CourseType type, String companion) {
-        return switch (type) {
-            case ACTIVE    -> companion + "과(와) 함께 체험·레저를 즐기는 액티브 코스입니다.";
-            case CULTURE   -> companion + "과(와) 함께 자연, 전시, 역사를 둘러보는 문화 탐방 코스입니다.";
-            case FOOD_TOUR -> companion + "과(와) 함께 맛집과 카페를 중심으로 즐기는 식도락 코스입니다.";
-        };
-    }
 }

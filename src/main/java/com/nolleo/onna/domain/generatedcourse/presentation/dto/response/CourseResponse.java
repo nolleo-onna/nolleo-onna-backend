@@ -5,9 +5,8 @@ import com.nolleo.onna.domain.generatedcourse.domain.model.vo.CourseType;
 import com.nolleo.onna.domain.map.domain.model.MapPlace;
 import io.swagger.v3.oas.annotations.media.Schema;
 
-import java.util.Map;
-
 import java.util.List;
+import java.util.Map;
 
 @Schema(description = "생성된 코스")
 public record CourseResponse(
@@ -38,15 +37,13 @@ public record CourseResponse(
 
         @Schema(description = "방문 스팟 목록 (순서대로)")
         List<CourseItemResponse> items
+
 ) {
     public static CourseResponse from(GeneratedCourse course, Map<Long, MapPlace> placeById) {
-        int computedMinutes = course.getItems().stream()
-                .mapToInt(item -> item.getDurationMinutes() != null ? item.getDurationMinutes() : 0)
-                .sum();
-
-        Integer totalMinutes = (course.getCourseSummary() != null && course.getCourseSummary().totalMinutes() != null)
-                ? course.getCourseSummary().totalMinutes()
-                : computedMinutes;
+        List<CourseItemResponse> itemResponses = course.getItems().stream()
+                .map(item -> CourseItemResponse.from(item,
+                        item.getMapPlaceId() != null ? placeById.get(item.getMapPlaceId()) : null))
+                .toList();
 
         return new CourseResponse(
                 course.getId(),
@@ -56,11 +53,8 @@ public record CourseResponse(
                 course.getTitle(),
                 course.getDescription(),
                 course.getCourseSummary() != null ? course.getCourseSummary().totalCost() : null,
-                totalMinutes,
-                course.getItems().stream()
-                        .map(item -> CourseItemResponse.from(item,
-                                item.getMapPlaceId() != null ? placeById.get(item.getMapPlaceId()) : null))
-                        .toList()
+                course.computeTotalMinutes(),
+                itemResponses
         );
     }
 }
