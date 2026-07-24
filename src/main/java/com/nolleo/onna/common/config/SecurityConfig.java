@@ -65,6 +65,9 @@ public class SecurityConfig {
                         // 날씨·혼잡도 — 비로그인 사용자도 접근 가능
                         .requestMatchers("/api/v1/weather/**").permitAll()
                         .requestMatchers("/api/v1/congestion/**").permitAll()
+                        // [개발 검증용] 자연어 코스 대화 및 생성 결과 조회 — 검증 완료 후 인증 필요로 전환 예정
+                        .requestMatchers("/api/v1/courses/chat").permitAll()
+                        .requestMatchers("/api/v1/courses/*").permitAll()
                         // 재발급은 access 없이 refresh 쿠키로 동작 → permitAll
                         .requestMatchers("/api/v1/auth/refresh").permitAll()
                         // me/logout 등 나머지는 인증 필요
