@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.spot.domain.model;
 
 import com.nolleo.onna.domain.spot.domain.model.vo.GeoCoordinate;
+import com.nolleo.onna.domain.spot.domain.model.vo.SpotCategory;
 
 import java.time.OffsetDateTime;
 
@@ -75,4 +76,8 @@ public class Spot {
     public OffsetDateTime getUpdatedAt()          { return updatedAt; }
     public boolean isActive()                     { return active; }
     public OffsetDateTime getInactiveSince()      { return inactiveSince; }
+
+    public SpotCategory getCategory() {
+        return SpotCategory.fromLclsSystm1(lclsSystm1);
+    }
 }
