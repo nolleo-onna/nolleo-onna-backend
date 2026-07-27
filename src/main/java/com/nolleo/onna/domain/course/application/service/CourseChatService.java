@@ -5,6 +5,7 @@ import com.nolleo.onna.domain.course.application.dto.ConversationState;
 import com.nolleo.onna.domain.course.application.dto.ParsedMessage;
 import com.nolleo.onna.domain.course.application.port.ChatReplyWriter;
 import com.nolleo.onna.domain.course.application.port.ConversationStore;
+import com.nolleo.onna.domain.course.application.port.CourseGenerationLimiter;
 import com.nolleo.onna.domain.course.application.port.CourseIntentParser;
 import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
@@ -15,13 +16,14 @@ import org.springframework.stereotype.Service;
 import java.util.UUID;
 
 /**
- * 자연어 코스 대화 유스케이스 조율.
+ * 자연어 코스 대화 유스케이스 조율. 회원(로그인 사용자)만 이용 가능.
  *
  * 흐름:
  *   1. 이전 대화 상태(부분 intent + 생성 확인 대기 여부) 조회 — conversationId 기준
  *   2. 이번 메시지를 Gemini로 파싱
  *   3. 여행 무관 메시지면 OFF_TOPIC 즉시 반환 (대화 상태 유지, 병합 안 함)
- *   4. 생성 확인 대기 중이었다면: "코스 생성 시작" 문구가 정확히 있을 때만 즉시 생성, 아니면 새 입력을 병합해 재평가
+ *   4. 생성 확인 대기 중이었다면: "코스 생성 시작" 문구가 정확히 있을 때만 일일 생성 횟수 확인 후 즉시 생성,
+ *      아니면 새 입력을 병합해 재평가
  *   5. 그 외에는 기존 intent와 병합 후 분기:
  *      - startArea 없음                → NEED_MORE_INFO (지역 되묻기)
  *      - 선택필드 전부 없음 & 첫 되묻기     → NEED_MORE_INFO (선호 되묻기, 1회만)
@@ -35,18 +37,13 @@ public class CourseChatService {
     /** 생성 확인 대기 중, 이 문구가 메시지에 정확히 포함되어 있을 때만 코스 생성을 시작한다. */
     private static final String GENERATE_TRIGGER_PHRASE = "코스 생성 시작";
 
-    /**
-     * 비로그인 사용자를 위한 임시 테스트 userId.
-     * TODO: 로그인 필수화 확정 시 실제 인증 사용자 ID로 교체하고 이 상수는 제거한다.
-     */
-    private static final Long TEMP_TEST_USER_ID = 1L;
-
     private final CourseIntentParser intentParser;
     private final ChatReplyWriter replyWriter;
     private final ConversationStore conversationStore;
+    private final CourseGenerationLimiter generationLimiter;
     private final CourseGenerationService courseGenerationService;
 
-    public ChatResult chat(String message, String conversationId) {
+    public ChatResult chat(Long userId, String message, String conversationId) {
         // 1. 이전 대화 상태 복원 (없거나 만료면 새 대화)
         ConversationState previous = conversationStore.find(conversationId).orElse(null);
         String activeConversationId = (previous != null) ? conversationId : UUID.randomUUID().toString();
@@ -61,9 +58,14 @@ public class CourseChatService {
             return ChatResult.offTopic(replyWriter.offTopic(), activeConversationId, current);
         }
 
-        // 3. 생성 확인 대기 중 + "코스 생성 시작" 문구 — 병합 없이 그대로 생성
+        // 3. 생성 확인 대기 중 + "코스 생성 시작" 문구 — 일일 한도 확인 후 생성 (병합 없이 그대로)
         if (previous != null && previous.awaitingConfirmation() && message.contains(GENERATE_TRIGGER_PHRASE)) {
-            return generate(previousIntent, activeConversationId);
+            if (!generationLimiter.tryConsume(userId)) {
+                return ChatResult.limitExceeded(
+                        "오늘 AI 코스 생성 가능 횟수(하루 " + CourseGenerationLimiter.DAILY_LIMIT + "회)를 모두 사용하셨어요. 내일 다시 이용해주세요!",
+                        activeConversationId, previousIntent);
+            }
+            return generate(userId, previousIntent, activeConversationId);
         }
 
         // 4. 병합
@@ -86,9 +88,9 @@ public class CourseChatService {
         return ChatResult.needMoreInfo(replyWriter.confirmGenerate(intent), activeConversationId, intent);
     }
 
-    private ChatResult generate(CourseIntent intent, String conversationId) {
+    private ChatResult generate(Long userId, CourseIntent intent, String conversationId) {
         conversationStore.delete(conversationId);
-        Course course = courseGenerationService.generate(TEMP_TEST_USER_ID, intent, "AI_CHAT");
+        Course course = courseGenerationService.generate(userId, intent, "AI_CHAT");
         return ChatResult.completed(replyWriter.ready(intent), conversationId, intent, course.getPairId());
     }
 }
