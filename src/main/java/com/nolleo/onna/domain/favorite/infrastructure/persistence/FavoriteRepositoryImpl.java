@@ -22,8 +22,7 @@ public class FavoriteRepositoryImpl implements FavoriteRepository {
 
     @Override
     public void delete(Favorite favorite) {
-        jpaRepository.findByUserIdAndMapPlaceId(favorite.userId(), favorite.mapPlaceId())
-                .ifPresent(jpaRepository::delete);
+        jpaRepository.deleteById(favorite.id());
     }
 
     @Override

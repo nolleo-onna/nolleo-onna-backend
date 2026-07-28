@@ -82,7 +82,6 @@ class FavoriteQueryServiceTest {
 
         given(favoriteRepository.findAllByUserId(userId, pageable))
                 .willReturn(new PageImpl<>(List.of(), pageable, 0));
-        given(mapPlaceRepository.findAllByIds(Set.of())).willReturn(Map.of());
 
         // when
         Page<FavoriteItemResponse> result = favoriteQueryService.getFavorites(userId, pageable);
@@ -152,7 +151,6 @@ class FavoriteQueryServiceTest {
         // userId=1의 목록은 비어있음 (otherUserId=2의 찜이 섞이지 않음을 가정)
         given(favoriteRepository.findAllByUserId(eq(userId), any(Pageable.class)))
                 .willReturn(new PageImpl<>(List.of(), pageable, 0));
-        given(mapPlaceRepository.findAllByIds(Set.of())).willReturn(Map.of());
 
         // when
         Page<FavoriteItemResponse> result = favoriteQueryService.getFavorites(userId, pageable);

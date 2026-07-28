@@ -29,6 +29,10 @@ public class FavoriteQueryService {
     public Page<FavoriteItemResponse> getFavorites(Long userId, Pageable pageable) {
         Page<Favorite> favorites = favoriteRepository.findAllByUserId(userId, pageable);
 
+        if (favorites.isEmpty()) {
+            return Page.empty(pageable);
+        }
+
         Set<Long> mapPlaceIds = favorites.stream()
                 .map(Favorite::mapPlaceId)
                 .collect(Collectors.toSet());
@@ -37,6 +41,9 @@ public class FavoriteQueryService {
 
         return favorites.map(favorite -> {
             MapPlace place = mapPlaceById.get(favorite.mapPlaceId());
+            if (place == null) {
+                throw new BusinessException(FavoriteErrorCode.MAP_PLACE_NOT_FOUND);
+            }
             return FavoriteItemResponse.of(favorite, place);
         });
     }
