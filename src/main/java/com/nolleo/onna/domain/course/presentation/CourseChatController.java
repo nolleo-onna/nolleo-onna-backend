@@ -6,8 +6,8 @@ import com.nolleo.onna.domain.course.application.dto.ChatResult;
 import com.nolleo.onna.domain.course.application.service.CourseChatService;
 import com.nolleo.onna.domain.course.application.service.CourseQueryService;
 import com.nolleo.onna.domain.course.presentation.dto.request.CourseChatRequest;
-import com.nolleo.onna.domain.course.presentation.dto.response.CourseResponse;
-import com.nolleo.onna.domain.course.presentation.dto.response.CourseSummaryResponse;
+import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
+import com.nolleo.onna.domain.course.application.dto.response.CourseSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -70,10 +70,14 @@ public class CourseChatController {
     @GetMapping("/{pairId}")
     @Operation(
             summary = "생성된 코스 조회",
-            description = "chat API의 COMPLETED 응답에서 받은 pairId로 생성된 코스(들)을 방문 스팟 상세와 함께 조회한다. 로그인이 필요하다."
+            description = "chat API의 COMPLETED 응답에서 받은 pairId로 생성된 코스(들)을 방문 스팟 상세와 함께 조회한다. " +
+                    "로그인이 필요하며, 본인이 생성한 코스만 조회할 수 있다."
     )
-    public ResponseEntity<ApiResponseDto<List<CourseResponse>>> getCourse(@PathVariable UUID pairId) {
-        List<CourseResponse> data = courseQueryService.getByPairId(pairId);
+    public ResponseEntity<ApiResponseDto<List<CourseResponse>>> getCourse(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable UUID pairId
+    ) {
+        List<CourseResponse> data = courseQueryService.getByPairId(principal.userId(), pairId);
         return ApiResponseDto.success(200, "코스 조회 성공", data);
     }
 }
