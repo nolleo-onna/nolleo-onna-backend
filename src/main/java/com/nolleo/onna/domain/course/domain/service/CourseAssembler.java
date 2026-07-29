@@ -1,13 +1,14 @@
 package com.nolleo.onna.domain.course.domain.service;
 
-import com.nolleo.onna.domain.spot.domain.model.Spot;
-
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 선택된 스팟 목록을 시작 좌표 기준 최근접 탐욕(nearest-neighbor) 순서로 배치한다.
+ * 선택된 방문 지점을 시작 좌표 기준 최근접 탐욕(nearest-neighbor) 순서로 배치한다.
  * PostGIS 왕복 없이 이미 로딩된 좌표로 순수 계산한다.
+ *
+ * Spot 애그리거트를 직접 알지 않고 Course 컨텍스트 소유의 Waypoint VO만 다룬다.
+ * Spot → Waypoint 변환은 application 계층의 책임이다.
  */
 public class CourseAssembler {
 
@@ -16,22 +17,27 @@ public class CourseAssembler {
     private CourseAssembler() {
     }
 
-    public record AssembledItem(Spot spot, short distanceFromPrevM) {
+    /**
+     * 코스 조립에 필요한 최소 정보만 담은 방문 지점.
+     *   refId — 외부 애그리거트 식별자 (현재는 spot content_id)
+     */
+    public record Waypoint(String refId, double latitude, double longitude) {
     }
 
-    public static List<AssembledItem> assemble(double startLat, double startLon, List<Spot> candidates) {
-        List<Spot> remaining = new ArrayList<>(candidates);
+    public record AssembledItem(Waypoint waypoint, short distanceFromPrevM) {
+    }
+
+    public static List<AssembledItem> assemble(double startLat, double startLon, List<Waypoint> candidates) {
+        List<Waypoint> remaining = new ArrayList<>(candidates);
         List<AssembledItem> result = new ArrayList<>();
         double curLat = startLat;
         double curLon = startLon;
 
         while (!remaining.isEmpty()) {
-            Spot nearest = null;
+            Waypoint nearest = null;
             double nearestDistance = Double.MAX_VALUE;
-            for (Spot candidate : remaining) {
-                double lat = candidate.getGeoCoordinate().latitude().doubleValue();
-                double lon = candidate.getGeoCoordinate().longitude().doubleValue();
-                double distance = haversineMeters(curLat, curLon, lat, lon);
+            for (Waypoint candidate : remaining) {
+                double distance = haversineMeters(curLat, curLon, candidate.latitude(), candidate.longitude());
                 if (distance < nearestDistance) {
                     nearestDistance = distance;
                     nearest = candidate;
@@ -39,10 +45,15 @@ public class CourseAssembler {
             }
             result.add(new AssembledItem(nearest, (short) Math.round(nearestDistance)));
             remaining.remove(nearest);
-            curLat = nearest.getGeoCoordinate().latitude().doubleValue();
-            curLon = nearest.getGeoCoordinate().longitude().doubleValue();
+            curLat = nearest.latitude();
+            curLon = nearest.longitude();
         }
         return result;
+    }
+
+    /** 두 좌표 사이의 대권 거리(미터). 후보 정렬 등 조립 외 용도로도 사용한다. */
+    public static double distanceMeters(double lat1, double lon1, double lat2, double lon2) {
+        return haversineMeters(lat1, lon1, lat2, lon2);
     }
 
     private static double haversineMeters(double lat1, double lon1, double lat2, double lon2) {

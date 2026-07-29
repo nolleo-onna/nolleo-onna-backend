@@ -1,4 +1,4 @@
-package com.nolleo.onna.domain.course.domain.service;
+package com.nolleo.onna.domain.course.domain.model.vo;
 
 import java.util.Arrays;
 import java.util.Optional;

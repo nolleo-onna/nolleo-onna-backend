@@ -1,4 +1,4 @@
-package com.nolleo.onna.domain.course.presentation.dto.response;
+package com.nolleo.onna.domain.course.application.dto.response;
 
 import com.nolleo.onna.domain.course.domain.model.CourseItem;
 import com.nolleo.onna.domain.spot.domain.model.Spot;

@@ -1,8 +1,8 @@
 package com.nolleo.onna.domain.spot.application.service;
 
+import com.nolleo.onna.domain.spot.application.port.EmbeddingClient;
 import com.nolleo.onna.domain.spot.domain.model.SpotSimilarity;
 import com.nolleo.onna.domain.spot.domain.repository.SpotEmbeddingRepository;
-import com.nolleo.onna.domain.spot.infrastructure.ai.OpenAiEmbeddingClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -16,7 +16,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SpotSimilarityQueryService {
 
-    private final OpenAiEmbeddingClient embeddingClient;
+    private final EmbeddingClient embeddingClient;
     private final SpotEmbeddingRepository spotEmbeddingRepository;
 
     /** queryText(무드·동행 설명)와 candidateContentIds 후보군을 유사도 내림차순으로 정렬해 반환 */

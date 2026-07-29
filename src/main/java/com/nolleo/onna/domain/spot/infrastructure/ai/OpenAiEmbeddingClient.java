@@ -2,6 +2,7 @@ package com.nolleo.onna.domain.spot.infrastructure.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nolleo.onna.domain.spot.application.port.EmbeddingClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,14 +18,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * OpenAI Embeddings API 클라이언트.
+ * EmbeddingClient 포트의 OpenAI Embeddings API 구현.
  * spot_embeddings 테이블과 동일 모델(text-embedding-3-small, 1536차원)을 사용해야
  * 벡터 공간이 일치한다.
  */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class OpenAiEmbeddingClient {
+public class OpenAiEmbeddingClient implements EmbeddingClient {
 
     private static final String URL = "https://api.openai.com/v1/embeddings";
 
@@ -38,6 +39,7 @@ public class OpenAiEmbeddingClient {
     private String model;
 
     /** 텍스트를 임베딩 벡터(1536차원)로 변환 */
+    @Override
     public List<Float> embed(String text) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

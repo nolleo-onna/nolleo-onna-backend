@@ -6,7 +6,7 @@ import com.nolleo.onna.domain.course.application.dto.ParsedMessage;
 import com.nolleo.onna.domain.course.application.port.CourseIntentParser;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotHints;
-import com.nolleo.onna.domain.course.domain.service.DistrictCenter;
+import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
