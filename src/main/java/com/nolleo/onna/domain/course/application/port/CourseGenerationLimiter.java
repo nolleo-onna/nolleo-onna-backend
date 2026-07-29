@@ -14,4 +14,10 @@ public interface CourseGenerationLimiter {
      * 원자적으로 처리되어야 한다(동시 요청에도 정확히 DAILY_LIMIT까지만 허용).
      */
     boolean tryConsume(Long userId);
+
+    /**
+     * tryConsume으로 소비한 1회를 되돌린다. 코스 생성이 실패했을 때 호출한다.
+     * 보상 처리이므로 실패해도 원래 예외를 가리지 않아야 한다.
+     */
+    void refund(Long userId);
 }

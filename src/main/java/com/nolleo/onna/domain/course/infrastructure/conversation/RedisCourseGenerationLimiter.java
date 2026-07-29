@@ -26,11 +26,27 @@ public class RedisCourseGenerationLimiter implements CourseGenerationLimiter {
 
     @Override
     public boolean tryConsume(Long userId) {
-        String key = KEY_PREFIX + userId + ":" + LocalDate.now(KST).format(DATE_FORMAT);
+        String key = dailyKey(userId);
         Long count = redisTemplate.opsForValue().increment(key);
         if (count != null && count == 1L) {
             redisTemplate.expire(key, Duration.ofDays(1));
         }
         return count != null && count <= DAILY_LIMIT;
+    }
+
+    @Override
+    public void refund(Long userId) {
+        String key = dailyKey(userId);
+        Long count = redisTemplate.opsForValue().decrement(key);
+        // 0 이하면 키를 정리한다.
+        // 소비와 환불 사이에 TTL이 만료된 경우 DECR이 TTL 없는 -1 키를 새로 만들기 때문에,
+        // 그대로 두면 영구히 남아 다음날 한도를 잘못 늘려준다.
+        if (count != null && count <= 0L) {
+            redisTemplate.delete(key);
+        }
+    }
+
+    private String dailyKey(Long userId) {
+        return KEY_PREFIX + userId + ":" + LocalDate.now(KST).format(DATE_FORMAT);
     }
 }

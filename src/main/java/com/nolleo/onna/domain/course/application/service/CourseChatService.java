@@ -88,9 +88,32 @@ public class CourseChatService {
         return ChatResult.needMoreInfo(replyWriter.confirmGenerate(intent), activeConversationId, intent);
     }
 
+    /**
+     * 실제 코스 생성. 이미 일일 횟수를 1회 소비한 상태로 진입한다.
+     *
+     * 실패 시 소비한 횟수를 되돌리고 대화 상태도 남겨둔다.
+     * 사용자는 같은 conversationId로 "코스 생성 시작"만 다시 보내면 재시도할 수 있다.
+     */
     private ChatResult generate(Long userId, CourseIntent intent, String conversationId) {
+        Course course;
+        try {
+            course = courseGenerationService.generate(userId, intent, "AI_CHAT");
+        } catch (RuntimeException e) {
+            refundQuietly(userId);
+            throw e;
+        }
+
+        // 생성에 성공한 뒤에만 대화 상태를 정리한다
         conversationStore.delete(conversationId);
-        Course course = courseGenerationService.generate(userId, intent, "AI_CHAT");
         return ChatResult.completed(replyWriter.ready(intent), conversationId, intent, course.getPairId());
+    }
+
+    /** 횟수 복구 실패가 원래 생성 실패 원인을 가리지 않도록 삼킨다. */
+    private void refundQuietly(Long userId) {
+        try {
+            generationLimiter.refund(userId);
+        } catch (RuntimeException e) {
+            log.error("코스 생성 실패 후 일일 횟수 복구 실패 userId={}", userId, e);
+        }
     }
 }
