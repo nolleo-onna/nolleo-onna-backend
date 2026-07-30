@@ -49,4 +49,10 @@ public interface MapPlaceRepository {
 
     /** 리뷰 수정 시 avg_rating만 재계산 (review_count 변동 없음) */
     void updateAvgRating(Long mapPlaceId, int oldRating, int newRating);
+
+    /** 찜 추가 시 favorite_count 원자적 증가 */
+    void incrementFavoriteCount(Long mapPlaceId);
+
+    /** 찜 취소 시 favorite_count 원자적 감소 (0 미만 방지) */
+    void decrementFavoriteCount(Long mapPlaceId);
 }

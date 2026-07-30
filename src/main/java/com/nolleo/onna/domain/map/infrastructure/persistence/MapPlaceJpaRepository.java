@@ -82,6 +82,24 @@ public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Lon
             """, nativeQuery = true)
     void updateAvgRating(@Param("id") Long id, @Param("oldRating") int oldRating, @Param("newRating") int newRating);
 
+    /** 찜 추가 시 favorite_count 원자적 증가 */
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            UPDATE mp_map_places
+            SET favorite_count = favorite_count + 1
+            WHERE id = :id
+            """, nativeQuery = true)
+    void incrementFavoriteCount(@Param("id") Long id);
+
+    /** 찜 취소 시 favorite_count 원자적 감소 — 0 미만 방지 */
+    @Modifying(clearAutomatically = true)
+    @Query(value = """
+            UPDATE mp_map_places
+            SET favorite_count = favorite_count - 1
+            WHERE id = :id AND favorite_count > 0
+            """, nativeQuery = true)
+    void decrementFavoriteCount(@Param("id") Long id);
+
     /** 장소 목록을 distance 순으로 정렬하면서 각 장소까지의 거리(m)도 함께 반환 — [id, distanceMeters] */
     @Query(value = """
             SELECT id, ST_Distance(geog, ST_MakePoint(:lon, :lat)::geography) AS distance_m

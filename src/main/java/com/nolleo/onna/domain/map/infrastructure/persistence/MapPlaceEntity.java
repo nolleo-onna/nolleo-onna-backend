@@ -67,6 +67,9 @@ public class MapPlaceEntity {
     @Column(name = "review_count", nullable = false)
     private long reviewCount;
 
+    @Column(name = "favorite_count", nullable = false)
+    private long favoriteCount;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -89,6 +92,7 @@ public class MapPlaceEntity {
             mapPlace.isActive(),
             mapPlace.getAvgRating(),
             mapPlace.getReviewCount(),
+            mapPlace.getFavoriteCount(),
             OffsetDateTime.now(),
             OffsetDateTime.now()
         );
@@ -110,6 +114,6 @@ public class MapPlaceEntity {
     public MapPlace toDomain() {
         return new MapPlace(id, placeType, originalId, name, district, category,
                             longitude, latitude, imageUrl, minPrice, free, active,
-                            avgRating, reviewCount);
+                            avgRating, reviewCount, favoriteCount);
     }
 }

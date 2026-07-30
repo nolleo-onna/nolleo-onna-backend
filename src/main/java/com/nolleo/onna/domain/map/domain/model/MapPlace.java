@@ -21,12 +21,13 @@ public class MapPlace {
     private final boolean active;
     private final BigDecimal avgRating;
     private final long reviewCount;
+    private final long favoriteCount;
 
     public MapPlace(Long id, PlaceType placeType, String originalId, String name,
                     String district, PlaceCategory category,
                     BigDecimal longitude, BigDecimal latitude,
                     String imageUrl, Integer minPrice, boolean free, boolean active,
-                    BigDecimal avgRating, long reviewCount) {
+                    BigDecimal avgRating, long reviewCount, long favoriteCount) {
         this.id = id;
         this.placeType = placeType;
         this.originalId = originalId;
@@ -41,6 +42,7 @@ public class MapPlace {
         this.active = active;
         this.avgRating = avgRating;
         this.reviewCount = reviewCount;
+        this.favoriteCount = favoriteCount;
     }
 
     public Long getId()             { return id; }
@@ -57,4 +59,5 @@ public class MapPlace {
     public boolean isActive()          { return active; }
     public BigDecimal getAvgRating()   { return avgRating; }
     public long getReviewCount()       { return reviewCount; }
+    public long getFavoriteCount()     { return favoriteCount; }
 }
