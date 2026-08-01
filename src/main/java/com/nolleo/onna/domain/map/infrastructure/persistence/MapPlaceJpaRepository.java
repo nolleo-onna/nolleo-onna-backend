@@ -14,14 +14,22 @@ import java.util.Optional;
 
 public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Long> {
 
-    @Query("SELECT e FROM MapPlaceEntity e WHERE e.active = true " +
-           "AND (:district IS NULL OR e.district = :district) " +
-           "AND (:category IS NULL OR e.category = :category) " +
-           "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice IS NULL OR e.minPrice <= :maxBudget)")
+    @Query(value = "SELECT e FROM MapPlaceEntity e WHERE e.active = true " +
+                  "AND (:district IS NULL OR e.district = :district) " +
+                  "AND (:category IS NULL OR e.category = :category) " +
+                  "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice IS NULL OR e.minPrice <= :maxBudget) " +
+                  "AND (:keyword IS NULL OR LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+                  "ORDER BY CASE WHEN e.category = 'VE' THEN 0 ELSE 1 END",
+           countQuery = "SELECT COUNT(e) FROM MapPlaceEntity e WHERE e.active = true " +
+                       "AND (:district IS NULL OR e.district = :district) " +
+                       "AND (:category IS NULL OR e.category = :category) " +
+                       "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice IS NULL OR e.minPrice <= :maxBudget) " +
+                       "AND (:keyword IS NULL OR LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')))")
     Page<MapPlaceEntity> findByFilterPaged(
         @Param("district") String district,
         @Param("category") PlaceCategory category,
         @Param("maxBudget") Integer maxBudget,
+        @Param("keyword") String keyword,
         Pageable pageable
     );
 

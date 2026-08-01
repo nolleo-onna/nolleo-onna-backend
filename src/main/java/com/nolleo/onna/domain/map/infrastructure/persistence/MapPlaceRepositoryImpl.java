@@ -24,14 +24,14 @@ public class MapPlaceRepositoryImpl implements MapPlaceRepository {
 
     @Override
     public List<MapPlace> findByFilter(String district, PlaceCategory category, Integer maxBudget) {
-        return jpaRepository.findByFilterPaged(district, category, maxBudget, Pageable.unpaged())
+        return jpaRepository.findByFilterPaged(district, category, maxBudget, null, Pageable.unpaged())
                 .map(MapPlaceEntity::toDomain)
                 .getContent();
     }
 
     @Override
-    public Page<MapPlace> findByFilterPaged(String district, PlaceCategory category, Integer maxBudget, Pageable pageable) {
-        return jpaRepository.findByFilterPaged(district, category, maxBudget, pageable)
+    public Page<MapPlace> findByFilterPaged(String district, PlaceCategory category, Integer maxBudget, String keyword, Pageable pageable) {
+        return jpaRepository.findByFilterPaged(district, category, maxBudget, keyword, pageable)
                 .map(MapPlaceEntity::toDomain);
     }
 
