@@ -1,7 +1,7 @@
 package com.nolleo.onna.domain.course.application.dto.response;
 
+import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.domain.model.Course;
-import com.nolleo.onna.domain.spot.domain.model.Spot;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.time.OffsetDateTime;
@@ -37,7 +37,7 @@ public record CourseResponse(
         OffsetDateTime createdAt
 
 ) {
-    public static CourseResponse of(Course course, Map<String, Spot> spotByContentId) {
+    public static CourseResponse of(Course course, Map<String, SpotCandidate> spotByContentId) {
         List<CourseItemResponse> items = course.getItems().stream()
                 .map(item -> CourseItemResponse.of(item, spotByContentId.get(item.getSpotContentId())))
                 .toList();

@@ -1,7 +1,7 @@
 package com.nolleo.onna.domain.course.application.dto.response;
 
+import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.domain.model.Course;
-import com.nolleo.onna.domain.spot.domain.model.Spot;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.util.List;
@@ -30,11 +30,11 @@ public record CourseSummaryResponse(
         List<String> spotTitles
 
 ) {
-    public static CourseSummaryResponse of(Course course, Map<String, Spot> spotByContentId) {
+    public static CourseSummaryResponse of(Course course, Map<String, SpotCandidate> spotByContentId) {
         List<String> spotTitles = course.getItems().stream()
                 .map(item -> {
-                    Spot spot = spotByContentId.get(item.getSpotContentId());
-                    return spot != null ? spot.getTitle() : null;
+                    SpotCandidate spot = spotByContentId.get(item.getSpotContentId());
+                    return spot != null ? spot.title() : null;
                 })
                 .toList();
 

@@ -1,9 +1,7 @@
 package com.nolleo.onna.domain.course.application.dto.response;
 
+import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.domain.model.CourseItem;
-import com.nolleo.onna.domain.spot.domain.model.Spot;
-import com.nolleo.onna.domain.spot.domain.model.vo.GeoCoordinate;
-import com.nolleo.onna.domain.spot.domain.model.vo.SpotCategory;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 import java.math.BigDecimal;
@@ -39,17 +37,15 @@ public record CourseItemResponse(
         Short distanceFromPrevM
 
 ) {
-    public static CourseItemResponse of(CourseItem item, Spot spot) {
-        GeoCoordinate geo = spot != null ? spot.getGeoCoordinate() : null;
-        SpotCategory category = spot != null ? spot.getCategory() : null;
+    public static CourseItemResponse of(CourseItem item, SpotCandidate spot) {
         return new CourseItemResponse(
                 item.getSerialNum(),
                 item.getSpotContentId(),
-                spot != null ? spot.getTitle() : null,
-                geo != null ? geo.longitude() : null,
-                geo != null ? geo.latitude() : null,
-                spot != null ? spot.getFirstImage() : null,
-                category != null ? category.getLabel() : null,
+                spot != null ? spot.title() : null,
+                spot != null ? spot.mapX() : null,
+                spot != null ? spot.mapY() : null,
+                spot != null ? spot.firstImage() : null,
+                spot != null ? spot.categoryLabel() : null,
                 item.getExpectedCost(),
                 item.getDistanceFromPrevM()
         );

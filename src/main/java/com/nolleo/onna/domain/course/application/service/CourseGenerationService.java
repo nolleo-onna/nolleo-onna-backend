@@ -1,7 +1,9 @@
 package com.nolleo.onna.domain.course.application.service;
 
 import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.port.CourseContentWriter;
+import com.nolleo.onna.domain.course.application.port.SpotLookupPort;
 import com.nolleo.onna.domain.course.application.port.SpotReranker;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
@@ -11,12 +13,6 @@ import com.nolleo.onna.domain.course.domain.model.vo.SlotPlan;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
 import com.nolleo.onna.domain.course.domain.service.SlotPlanner;
-import com.nolleo.onna.domain.spot.domain.model.Spot;
-import com.nolleo.onna.domain.spot.domain.model.SpotPriceSummary;
-import com.nolleo.onna.domain.spot.domain.model.vo.GeoCoordinate;
-import com.nolleo.onna.domain.spot.domain.model.vo.SpotCategory;
-import com.nolleo.onna.domain.spot.domain.repository.SpotPriceSummaryRepository;
-import com.nolleo.onna.domain.spot.domain.repository.SpotsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,12 +31,15 @@ import java.util.UUID;
  * 순서:
  *   1. 시작 지역 좌표 확정 (DistrictCenter)
  *   2. SlotHints → SlotPlan (카테고리별 목표 개수)
- *   3. 카테고리 그룹별 후보 풀 조회 (거리순, SpotsRepository)
+ *   3. 카테고리 그룹별 후보 풀 조회 (거리순, SpotLookupPort)
  *   4. mood/companion이 있으면 벡터 유사도로 후보 풀 재정렬, 없으면 거리순 그대로 상위 N개 선택
  *   5. 최근접 탐욕 순서로 코스 조립 (CourseAssembler)
- *   6. FD 카테고리 아이템만 가격 조회 (SpotPriceSummaryRepository)
+ *   6. FD 카테고리 아이템만 가격 조회 (SpotLookupPort)
  *   7. 조립 완료 후 제목·소개 생성 (CourseContentWriter)
  *   8. 저장
+ *
+ * Spot 컨텍스트에는 SpotLookupPort/SpotReranker 포트로만 접근한다 —
+ * Spot의 도메인 모델(Spot/SpotCategory/GeoCoordinate)을 이 클래스가 직접 알지 않는다.
  *
  * 트랜잭션 정책:
  *   이 클래스에는 트랜잭션을 걸지 않는다. 4·7단계에서 외부 AI API를 호출하므로
@@ -55,14 +54,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class CourseGenerationService {
 
-    private static final List<SpotCategory> ATTRACTION_CATEGORIES = List.of(
-            SpotCategory.NA, SpotCategory.HS, SpotCategory.VE);
-    private static final List<SpotCategory> ACTIVITY_CATEGORIES = List.of(
-            SpotCategory.EX, SpotCategory.LS);
+    private static final List<String> ATTRACTION_CATEGORIES = List.of("NA", "HS", "VE");
+    private static final List<String> ACTIVITY_CATEGORIES = List.of("EX", "LS");
+    private static final String FOOD_CATEGORY = "FD";
     private static final int CANDIDATE_POOL_SIZE = 20;
 
-    private final SpotsRepository spotsRepository;
-    private final SpotPriceSummaryRepository spotPriceSummaryRepository;
+    private final SpotLookupPort spotLookupPort;
     private final SpotReranker spotReranker;
     private final CourseContentWriter courseContentWriter;
     private final CourseRepository courseRepository;
@@ -76,12 +73,12 @@ public class CourseGenerationService {
         SlotPlan plan = SlotPlanner.plan(intent.slotHints());
         String queryText = buildRerankQueryText(intent);
 
-        Map<String, Spot> selected = new LinkedHashMap<>();
-        selectGroup(List.of(SpotCategory.FD), plan.foodCount() + plan.cafeCount(), lat, lon, queryText, selected);
+        Map<String, SpotCandidate> selected = new LinkedHashMap<>();
+        selectGroup(List.of(FOOD_CATEGORY), plan.foodCount() + plan.cafeCount(), lat, lon, queryText, selected);
         selectGroup(ATTRACTION_CATEGORIES, plan.attractionCount(), lat, lon, queryText, selected);
         selectGroup(ACTIVITY_CATEGORIES, plan.activityCount(), lat, lon, queryText, selected);
 
-        // Spot 애그리거트 → Course 컨텍스트의 Waypoint VO 변환 (좌표 없는 스팟은 제외)
+        // SpotCandidate → Course 컨텍스트의 Waypoint VO 변환 (좌표 없는 스팟은 제외)
         List<CourseAssembler.Waypoint> waypoints = selected.values().stream()
                 .map(CourseGenerationService::toWaypoint)
                 .filter(Objects::nonNull)
@@ -91,20 +88,20 @@ public class CourseGenerationService {
 
         List<String> foodContentIds = assembled.stream()
                 .map(item -> selected.get(item.waypoint().refId()))
-                .filter(spot -> spot.getCategory() == SpotCategory.FD)
-                .map(Spot::getContentId)
+                .filter(SpotCandidate::isFood)
+                .map(SpotCandidate::contentId)
                 .toList();
-        Map<String, SpotPriceSummary> priceByContentId = spotPriceSummaryRepository.findAllByIds(foodContentIds);
+        Map<String, Integer> priceByContentId = spotLookupPort.findFoodPrices(foodContentIds);
 
         Course course = Course.createByAi(userId, UUID.randomUUID(), intent, createdBy);
         for (CourseAssembler.AssembledItem item : assembled) {
-            Spot spot = selected.get(item.waypoint().refId());
-            Integer expectedCost = resolveExpectedCost(spot, priceByContentId);
-            course.addItem(spot.getContentId(), expectedCost, item.distanceFromPrevM());
+            SpotCandidate spot = selected.get(item.waypoint().refId());
+            Integer expectedCost = spot.isFood() ? priceByContentId.get(spot.contentId()) : null;
+            course.addItem(spot.contentId(), expectedCost, item.distanceFromPrevM());
         }
 
         List<String> spotTitlesInOrder = assembled.stream()
-                .map(item -> selected.get(item.waypoint().refId()).getTitle())
+                .map(item -> selected.get(item.waypoint().refId()).title())
                 .toList();
         CourseContentWriter.CourseContent content = courseContentWriter.generate(intent, spotTitlesInOrder);
         course.applyAiContent(content.title(), content.description());
@@ -112,37 +109,21 @@ public class CourseGenerationService {
         return courseRepository.save(course);
     }
 
-    /** Spot 애그리거트에서 코스 조립에 필요한 좌표만 추출한다. 좌표가 없으면 null. */
-    private static CourseAssembler.Waypoint toWaypoint(Spot spot) {
-        if (!hasCoordinate(spot)) {
-            log.warn("좌표 없는 스팟 제외 contentId={}", spot.getContentId());
+    /** 코스 조립에 필요한 좌표만 추출한다. 좌표가 없으면 null. */
+    private static CourseAssembler.Waypoint toWaypoint(SpotCandidate spot) {
+        if (!spot.hasCoordinate()) {
+            log.warn("좌표 없는 스팟 제외 contentId={}", spot.contentId());
             return null;
         }
-        GeoCoordinate geo = spot.getGeoCoordinate();
         return new CourseAssembler.Waypoint(
-                spot.getContentId(),
-                geo.latitude().doubleValue(),
-                geo.longitude().doubleValue());
-    }
-
-    private static boolean hasCoordinate(Spot spot) {
-        GeoCoordinate geo = spot.getGeoCoordinate();
-        return geo != null && geo.latitude() != null && geo.longitude() != null;
+                spot.contentId(),
+                spot.mapY().doubleValue(),
+                spot.mapX().doubleValue());
     }
 
     /** 시작 좌표로부터 스팟까지의 직선 거리(미터). 후보 풀 정렬용. */
-    private static double distanceFrom(double lat, double lon, Spot spot) {
-        GeoCoordinate geo = spot.getGeoCoordinate();
-        return CourseAssembler.distanceMeters(
-                lat, lon, geo.latitude().doubleValue(), geo.longitude().doubleValue());
-    }
-
-    private Integer resolveExpectedCost(Spot spot, Map<String, SpotPriceSummary> priceByContentId) {
-        if (spot.getCategory() != SpotCategory.FD) return null;
-        SpotPriceSummary price = priceByContentId.get(spot.getContentId());
-        if (price == null) return null;
-        if (price.getMinPrice() != null) return price.getMinPrice();
-        return price.getRepresentativePrice();
+    private static double distanceFrom(double lat, double lon, SpotCandidate spot) {
+        return CourseAssembler.distanceMeters(lat, lon, spot.mapY().doubleValue(), spot.mapX().doubleValue());
     }
 
     private String buildRerankQueryText(CourseIntent intent) {
@@ -157,31 +138,31 @@ public class CourseGenerationService {
     }
 
     /** 카테고리 그룹의 후보 풀을 조회해 count개를 선택해 selected에 누적한다. */
-    private void selectGroup(List<SpotCategory> categories, int count, double lat, double lon,
-                              String queryText, Map<String, Spot> selected) {
+    private void selectGroup(List<String> categories, int count, double lat, double lon,
+                              String queryText, Map<String, SpotCandidate> selected) {
         if (count <= 0) return;
 
-        List<Spot> pool = new ArrayList<>();
-        for (SpotCategory category : categories) {
-            pool.addAll(spotsRepository.findNearbyByCategory(category.name(), lat, lon));
+        List<SpotCandidate> pool = new ArrayList<>();
+        for (String category : categories) {
+            pool.addAll(spotLookupPort.findNearbyByCategory(category, lat, lon));
         }
         // 카테고리별 조회 결과를 순서대로 이어 붙였기 때문에 병합된 목록은 거리순이 아니다.
         // 정렬 없이 앞에서 자르면 먼저 조회한 카테고리가 후보 풀을 독점해
         // 뒤쪽 카테고리(예: HS/VE)가 한 건도 후보에 들어가지 못한다.
         pool = pool.stream()
-                .filter(spot -> !selected.containsKey(spot.getContentId()))
-                .filter(CourseGenerationService::hasCoordinate)
+                .filter(spot -> !selected.containsKey(spot.contentId()))
+                .filter(SpotCandidate::hasCoordinate)
                 .sorted(Comparator.comparingDouble(spot -> distanceFrom(lat, lon, spot)))
                 .limit(CANDIDATE_POOL_SIZE)
                 .toList();
         if (pool.isEmpty()) return;
 
-        List<Spot> chosen;
+        List<SpotCandidate> chosen;
         if (queryText != null) {
-            List<String> poolIds = pool.stream().map(Spot::getContentId).toList();
+            List<String> poolIds = pool.stream().map(SpotCandidate::contentId).toList();
             List<String> rankedIds = spotReranker.rerank(queryText, poolIds);
-            Map<String, Spot> poolByContentId = new LinkedHashMap<>();
-            pool.forEach(spot -> poolByContentId.put(spot.getContentId(), spot));
+            Map<String, SpotCandidate> poolByContentId = new LinkedHashMap<>();
+            pool.forEach(spot -> poolByContentId.put(spot.contentId(), spot));
             chosen = rankedIds.stream()
                     .map(poolByContentId::get)
                     .filter(Objects::nonNull)
@@ -190,6 +171,6 @@ public class CourseGenerationService {
         } else {
             chosen = pool.stream().limit(count).toList();
         }
-        chosen.forEach(spot -> selected.put(spot.getContentId(), spot));
+        chosen.forEach(spot -> selected.put(spot.contentId(), spot));
     }
 }
