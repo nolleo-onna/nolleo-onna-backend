@@ -99,6 +99,14 @@ external:
   congestion:
     api-key: ${CONGESTION_API_KEY}
 
+ai:
+  gemini:
+    api-key: ${GEMINI_API_KEY}
+    model: gemini-3.1-flash-lite
+  openai:
+    api-key: ${OPENAI_API_KEY}
+    embedding-model: text-embedding-3-small
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
