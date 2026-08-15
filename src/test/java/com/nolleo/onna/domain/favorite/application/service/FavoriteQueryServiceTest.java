@@ -3,8 +3,10 @@ package com.nolleo.onna.domain.favorite.application.service;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.favorite.domain.exception.FavoriteErrorCode;
 import com.nolleo.onna.domain.favorite.domain.model.Favorite;
+import com.nolleo.onna.domain.favorite.domain.model.FavoritePeriodType;
 import com.nolleo.onna.domain.favorite.domain.repository.FavoriteRepository;
 import com.nolleo.onna.domain.favorite.presentation.dto.response.FavoriteItemResponse;
+import com.nolleo.onna.domain.favorite.presentation.dto.response.FavoriteStatsResponse;
 import com.nolleo.onna.domain.favorite.presentation.dto.response.FavoriteStatusResponse;
 import com.nolleo.onna.domain.map.domain.model.MapPlace;
 import com.nolleo.onna.domain.map.domain.model.vo.PlaceCategory;
@@ -161,5 +163,124 @@ class FavoriteQueryServiceTest {
 
     private MapPlace mock(Class<MapPlace> clazz) {
         return org.mockito.Mockito.mock(clazz);
+    }
+
+    // ── getStats ─────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("오늘 찜이 존재하면 TODAY와 오늘 찜 개수를 반환한다")
+    void getStats_returnsTodayStats_whenTodayCountPositive() {
+        // given
+        Long userId = 1L;
+        given(favoriteRepository.countByUserIdBetween(eq(userId), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .willReturn(3L);
+
+        // when
+        FavoriteStatsResponse result = favoriteQueryService.getStats(userId);
+
+        // then
+        assertThat(result.period()).isEqualTo(FavoritePeriodType.TODAY);
+        assertThat(result.count()).isEqualTo(3L);
+        assertThat(result.message()).isEqualTo("오늘 3개 찜했어요!");
+    }
+
+    @Test
+    @DisplayName("오늘 찜이 없고 이번 주 찜이 존재하면 WEEK와 이번 주 찜 개수를 반환한다")
+    void getStats_returnsWeekStats_whenTodayZeroAndWeekPositive() {
+        // given
+        Long userId = 1L;
+        given(favoriteRepository.countByUserIdBetween(eq(userId), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .willReturn(0L, 5L);
+
+        // when
+        FavoriteStatsResponse result = favoriteQueryService.getStats(userId);
+
+        // then
+        assertThat(result.period()).isEqualTo(FavoritePeriodType.WEEK);
+        assertThat(result.count()).isEqualTo(5L);
+        assertThat(result.message()).isEqualTo("이번 주 5개 찜했어요!");
+    }
+
+    @Test
+    @DisplayName("오늘·이번 주 찜이 없고 이번 달 찜이 존재하면 MONTH와 이번 달 찜 개수를 반환한다")
+    void getStats_returnsMonthStats_whenTodayAndWeekZeroAndMonthPositive() {
+        // given
+        Long userId = 1L;
+        given(favoriteRepository.countByUserIdBetween(eq(userId), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .willReturn(0L, 0L, 2L);
+
+        // when
+        FavoriteStatsResponse result = favoriteQueryService.getStats(userId);
+
+        // then
+        assertThat(result.period()).isEqualTo(FavoritePeriodType.MONTH);
+        assertThat(result.count()).isEqualTo(2L);
+        assertThat(result.message()).isEqualTo("이번 달 2개 찜했어요!");
+    }
+
+    @Test
+    @DisplayName("오늘과 이번 주 모두 찜이 존재하면 TODAY가 우선 반환된다")
+    void getStats_returnsTodayStats_whenBothTodayAndWeekPositive() {
+        // given
+        Long userId = 1L;
+        given(favoriteRepository.countByUserIdBetween(eq(userId), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .willReturn(2L, 8L);
+
+        // when
+        FavoriteStatsResponse result = favoriteQueryService.getStats(userId);
+
+        // then
+        assertThat(result.period()).isEqualTo(FavoritePeriodType.TODAY);
+        assertThat(result.count()).isEqualTo(2L);
+    }
+
+    @Test
+    @DisplayName("오늘은 0개이고 이번 주와 이번 달 모두 찜이 존재하면 WEEK가 우선 반환된다")
+    void getStats_returnsWeekStats_whenWeekAndMonthPositive() {
+        // given
+        Long userId = 1L;
+        given(favoriteRepository.countByUserIdBetween(eq(userId), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .willReturn(0L, 3L, 10L);
+
+        // when
+        FavoriteStatsResponse result = favoriteQueryService.getStats(userId);
+
+        // then
+        assertThat(result.period()).isEqualTo(FavoritePeriodType.WEEK);
+        assertThat(result.count()).isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("이번 달에도 찜이 없으면 MONTH와 count=0, 특별 메시지를 반환한다")
+    void getStats_returnsMonthWithZeroCount_whenAllZero() {
+        // given
+        Long userId = 1L;
+        given(favoriteRepository.countByUserIdBetween(eq(userId), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .willReturn(0L, 0L, 0L);
+
+        // when
+        FavoriteStatsResponse result = favoriteQueryService.getStats(userId);
+
+        // then
+        assertThat(result.period()).isEqualTo(FavoritePeriodType.MONTH);
+        assertThat(result.count()).isEqualTo(0L);
+        assertThat(result.message()).isEqualTo("이번 달에 찜한 장소가 없어요");
+    }
+
+    @Test
+    @DisplayName("인증된 userId의 찜만 집계된다")
+    void getStats_countsOnlyCurrentUserId() {
+        // given
+        Long userId = 1L;
+        given(favoriteRepository.countByUserIdBetween(eq(userId), any(OffsetDateTime.class), any(OffsetDateTime.class)))
+                .willReturn(4L);
+
+        // when
+        FavoriteStatsResponse result = favoriteQueryService.getStats(userId);
+
+        // then — userId=1 기준으로만 조회됨, 다른 사용자 데이터 혼입 없음
+        assertThat(result.period()).isEqualTo(FavoritePeriodType.TODAY);
+        assertThat(result.count()).isEqualTo(4L);
+        org.mockito.Mockito.verify(favoriteRepository).countByUserIdBetween(eq(userId), any(), any());
     }
 }
