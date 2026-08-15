@@ -54,7 +54,7 @@ class FavoriteQueryServiceTest {
         MapPlace mapPlace = new MapPlace(
                 mapPlaceId, PlaceType.SPOT, "original-1", "테스트 장소",
                 "마포구", PlaceCategory.NA, BigDecimal.valueOf(126.9), BigDecimal.valueOf(37.5),
-                null, null, true, true, BigDecimal.ZERO, 0L
+                null, null, true, true, BigDecimal.ZERO, 0L, 0L
         );
 
         given(favoriteRepository.findAllByUserId(userId, pageable))

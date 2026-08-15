@@ -80,6 +80,7 @@ public class MapPlaceSyncService {
                 minPrice != null && minPrice == 0,
                 food.isActive(),
                 BigDecimal.ZERO,
+                0L,
                 0L
         );
         mapPlaceRepository.save(mapPlace);
@@ -106,6 +107,7 @@ public class MapPlaceSyncService {
                 minPrice != null && minPrice == 0,
                 spot.isActive(),
                 BigDecimal.ZERO,
+                0L,
                 0L
         );
         mapPlaceRepository.save(mapPlace);

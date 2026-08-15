@@ -109,4 +109,14 @@ public class MapPlaceRepositoryImpl implements MapPlaceRepository {
     public void updateAvgRating(Long mapPlaceId, int oldRating, int newRating) {
         jpaRepository.updateAvgRating(mapPlaceId, oldRating, newRating);
     }
+
+    @Override
+    public void incrementFavoriteCount(Long mapPlaceId) {
+        jpaRepository.incrementFavoriteCount(mapPlaceId);
+    }
+
+    @Override
+    public void decrementFavoriteCount(Long mapPlaceId) {
+        jpaRepository.decrementFavoriteCount(mapPlaceId);
+    }
 }
