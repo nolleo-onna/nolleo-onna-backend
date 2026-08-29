@@ -43,7 +43,7 @@ class MapControllerTest {
                 1L, PlaceType.SPOT, "orig-1", "해운대 해수욕장", "해운대구", PlaceCategory.VE,
                 new BigDecimal("129.160"), new BigDecimal("35.158"),
                 "https://example.com/img.jpg", null, true, true,
-                new BigDecimal("4.30"), 10L
+                new BigDecimal("4.30"), 10L, 0L
         );
         return MapPlaceResponse.from(place);
     }
