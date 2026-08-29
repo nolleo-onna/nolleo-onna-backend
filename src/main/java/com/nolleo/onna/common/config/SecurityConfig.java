@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -65,6 +66,10 @@ public class SecurityConfig {
                         // 날씨·혼잡도 — 비로그인 사용자도 접근 가능
                         .requestMatchers("/api/v1/weather/**").permitAll()
                         .requestMatchers("/api/v1/congestion/**").permitAll()
+                        // 게시판 조회 - 비로그인 허용
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/**").permitAll()
+                        // 댓글 조회 - 비로그인 허용
+                        .requestMatchers(HttpMethod.GET, "/api/v1/posts/*/comments").permitAll()
                         // 재발급은 access 없이 refresh 쿠키로 동작 → permitAll
                         .requestMatchers("/api/v1/auth/refresh").permitAll()
                         // me/logout 등 나머지는 인증 필요
