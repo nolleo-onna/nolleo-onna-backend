@@ -62,6 +62,10 @@ dependencies {
 	// Actuator
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
+	// AWS S3
+	implementation platform('software.amazon.awssdk:bom:2.26.12')
+	implementation 'software.amazon.awssdk:s3'
+
 	// Test
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'org.springframework.security:spring-security-test'
