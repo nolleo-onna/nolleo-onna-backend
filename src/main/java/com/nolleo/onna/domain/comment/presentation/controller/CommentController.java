@@ -25,7 +25,7 @@ public class CommentController {
     private final CommentCommandService commentCommandService;
     private final CommentQueryService commentQueryService;
 
-    @PostMapping("/api/v1/comments")
+    @PostMapping("/comments")
     @Operation(summary = "댓글 작성")
     public ResponseEntity<ApiResponseDto<CommentResponse>> createComment(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -35,7 +35,7 @@ public class CommentController {
         return ApiResponseDto.success(201, "댓글 작성 성공", response);
     }
 
-    @DeleteMapping("/api/v1/comments/{commentId}")
+    @DeleteMapping("/comments/{commentId}")
     @Operation(summary = "댓글 삭제")
     public ResponseEntity<ApiResponseDto<Void>> deleteComment(
             @AuthenticationPrincipal AuthPrincipal principal,
@@ -45,7 +45,7 @@ public class CommentController {
         return ApiResponseDto.success(200, "댓글 삭제 성공", null);
     }
 
-    @GetMapping("/api/v1/posts/{postId}/comments")
+    @GetMapping("/posts/{postId}/comments")
     @Operation(summary = "댓글 목록 조회")
     public ResponseEntity<ApiResponseDto<Page<CommentResponse>>> getComments(
             @AuthenticationPrincipal AuthPrincipal principal,

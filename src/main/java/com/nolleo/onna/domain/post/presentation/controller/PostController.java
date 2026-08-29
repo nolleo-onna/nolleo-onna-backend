@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/posts")
+@RequestMapping("/posts")
 @RequiredArgsConstructor
 @Tag(name = "Post", description = "한끝 게시판 API")
 public class PostController {
