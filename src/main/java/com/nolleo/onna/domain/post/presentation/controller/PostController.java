@@ -2,6 +2,11 @@ package com.nolleo.onna.domain.post.presentation.controller;
 
 import com.nolleo.onna.common.response.ApiResponseDto;
 import com.nolleo.onna.common.security.AuthPrincipal;
+import com.nolleo.onna.domain.post.application.dto.CreatePostCommand;
+import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
+import com.nolleo.onna.domain.post.application.dto.PostPopularResult;
+import com.nolleo.onna.domain.post.application.dto.PostSummaryResult;
+import com.nolleo.onna.domain.post.application.dto.UpdatePostCommand;
 import com.nolleo.onna.domain.post.application.service.PostCommandService;
 import com.nolleo.onna.domain.post.application.service.PostLikeService;
 import com.nolleo.onna.domain.post.application.service.PostQueryService;
@@ -46,8 +51,10 @@ public class PostController {
             @AuthenticationPrincipal AuthPrincipal principal,
             @RequestBody @Valid CreatePostRequest request
     ) {
-        PostDetailResponse response = postCommandService.createPost(principal.userId(), request);
-        return ApiResponseDto.success(201, "게시글 작성 성공", response);
+        CreatePostCommand command = new CreatePostCommand(
+                request.title(), request.content(), request.categoryTags(), request.districtTag(), request.imageUrls());
+        PostDetailResult result = postCommandService.createPost(principal.userId(), command);
+        return ApiResponseDto.success(201, "게시글 작성 성공", toDetailResponse(result));
     }
 
     @GetMapping
@@ -63,7 +70,8 @@ public class PostController {
         PageRequest pageable = PageRequest.of(page, clampedSize, Sort.by(Sort.Direction.DESC, "createAudit.createdAt"));
         PostSearchCondition condition = new PostSearchCondition(category, district);
         Long userId = principal != null ? principal.userId() : null;
-        Page<PostSummaryResponse> response = postQueryService.getPosts(condition, pageable, userId);
+        Page<PostSummaryResponse> response = postQueryService.getPosts(condition, pageable, userId)
+                .map(this::toSummaryResponse);
         return ApiResponseDto.success(200, "게시글 목록 조회 성공", response);
     }
 
@@ -73,7 +81,9 @@ public class PostController {
             @AuthenticationPrincipal AuthPrincipal principal
     ) {
         Long userId = principal != null ? principal.userId() : null;
-        List<PostPopularResponse> response = postQueryService.getPopularPosts(userId);
+        List<PostPopularResponse> response = postQueryService.getPopularPosts(userId).stream()
+                .map(r -> new PostPopularResponse(r.postId(), r.title(), r.thumbnail(), r.likeCount(), r.isLiked()))
+                .toList();
         return ApiResponseDto.success(200, "인기 게시글 조회 성공", response);
     }
 
@@ -84,8 +94,8 @@ public class PostController {
             @PathVariable Long postId
     ) {
         Long userId = principal != null ? principal.userId() : null;
-        PostDetailResponse response = postQueryService.getPost(postId, userId);
-        return ApiResponseDto.success(200, "게시글 조회 성공", response);
+        PostDetailResult result = postQueryService.getPost(postId, userId);
+        return ApiResponseDto.success(200, "게시글 조회 성공", toDetailResponse(result));
     }
 
     @PatchMapping("/{postId}")
@@ -95,8 +105,10 @@ public class PostController {
             @PathVariable Long postId,
             @RequestBody @Valid UpdatePostRequest request
     ) {
-        PostDetailResponse response = postCommandService.updatePost(principal.userId(), postId, request);
-        return ApiResponseDto.success(200, "게시글 수정 성공", response);
+        UpdatePostCommand command = new UpdatePostCommand(
+                request.title(), request.content(), request.categoryTags(), request.districtTag(), request.imageUrls());
+        PostDetailResult result = postCommandService.updatePost(principal.userId(), postId, command);
+        return ApiResponseDto.success(200, "게시글 수정 성공", toDetailResponse(result));
     }
 
     @DeleteMapping("/{postId}")
@@ -128,5 +140,39 @@ public class PostController {
     ) {
         postReportService.report(principal.userId(), postId, request);
         return ApiResponseDto.success(200, "신고 접수 성공", null);
+    }
+
+    private PostDetailResponse toDetailResponse(PostDetailResult result) {
+        return new PostDetailResponse(
+                result.post().getId(),
+                result.post().getTitle(),
+                result.post().getContent(),
+                new PostDetailResponse.AuthorInfo(result.authorNickname(), result.authorProfileImageUrl()),
+                result.post().getCategoryTags(),
+                result.post().getDistrictTag(),
+                result.post().getImageUrls(),
+                result.post().getLikeCount(),
+                result.isLiked(),
+                result.post().getViewCount(),
+                result.post().getCommentCount(),
+                result.post().getCreatedAt(),
+                result.post().getUpdatedAt()
+        );
+    }
+
+    private PostSummaryResponse toSummaryResponse(PostSummaryResult result) {
+        return new PostSummaryResponse(
+                result.post().getId(),
+                result.post().getTitle(),
+                new PostSummaryResponse.AuthorInfo(result.authorNickname(), result.authorProfileImageUrl()),
+                result.post().getCategoryTags(),
+                result.post().getDistrictTag(),
+                result.post().getImageUrls() != null && !result.post().getImageUrls().isEmpty(),
+                result.post().getLikeCount(),
+                result.isLiked(),
+                result.post().getViewCount(),
+                result.post().getCommentCount(),
+                result.post().getCreatedAt()
+        );
     }
 }

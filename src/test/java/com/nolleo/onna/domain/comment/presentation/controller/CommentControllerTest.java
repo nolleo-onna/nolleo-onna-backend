@@ -3,10 +3,10 @@ package com.nolleo.onna.domain.comment.presentation.controller;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.common.security.AuthPrincipal;
 import com.nolleo.onna.common.security.jwt.JwtProvider;
+import com.nolleo.onna.domain.comment.application.dto.CommentResult;
 import com.nolleo.onna.domain.comment.application.service.CommentCommandService;
 import com.nolleo.onna.domain.comment.application.service.CommentQueryService;
 import com.nolleo.onna.domain.comment.domain.exception.CommentErrorCode;
-import com.nolleo.onna.domain.comment.presentation.dto.response.CommentResponse;
 import com.nolleo.onna.domain.post.domain.exception.PostErrorCode;
 import com.nolleo.onna.domain.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
@@ -51,10 +51,11 @@ class CommentControllerTest {
                 principal, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
     }
 
-    private CommentResponse sampleComment(Long id, Long parentId) {
-        return new CommentResponse(
+    private CommentResult sampleCommentResult(Long id, Long parentId) {
+        return new CommentResult(
                 id,
-                new CommentResponse.AuthorInfo("테스터", null),
+                "테스터",
+                null,
                 "댓글 내용",
                 false,
                 parentId,
@@ -68,7 +69,7 @@ class CommentControllerTest {
     @DisplayName("POST /api/v1/comments - 최상위 댓글 작성 시 201을 반환한다")
     void createComment_returns201_whenTopLevel() throws Exception {
         // given
-        given(commentCommandService.createComment(anyLong(), any())).willReturn(sampleComment(1L, null));
+        given(commentCommandService.createComment(anyLong(), any())).willReturn(sampleCommentResult(1L, null));
 
         // when & then
         mockMvc.perform(post("/api/v1/comments")
@@ -91,7 +92,7 @@ class CommentControllerTest {
     @DisplayName("POST /api/v1/comments - 대댓글 작성 시 201을 반환한다")
     void createComment_returns201_whenReply() throws Exception {
         // given
-        given(commentCommandService.createComment(anyLong(), any())).willReturn(sampleComment(2L, 1L));
+        given(commentCommandService.createComment(anyLong(), any())).willReturn(sampleCommentResult(2L, 1L));
 
         // when & then
         mockMvc.perform(post("/api/v1/comments")

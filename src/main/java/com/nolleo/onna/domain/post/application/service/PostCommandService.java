@@ -1,18 +1,19 @@
 package com.nolleo.onna.domain.post.application.service;
 
+import com.nolleo.onna.common.application.port.UserLookupPort;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.common.infrastructure.s3.ImageStoragePort;
+import com.nolleo.onna.domain.post.application.dto.CreatePostCommand;
+import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
+import com.nolleo.onna.domain.post.application.dto.UpdatePostCommand;
 import com.nolleo.onna.domain.post.domain.exception.PostErrorCode;
 import com.nolleo.onna.domain.post.domain.model.Post;
 import com.nolleo.onna.domain.post.domain.repository.PostRepository;
-import com.nolleo.onna.domain.post.presentation.dto.request.CreatePostRequest;
-import com.nolleo.onna.domain.post.presentation.dto.request.UpdatePostRequest;
-import com.nolleo.onna.domain.post.presentation.dto.response.PostDetailResponse;
-import com.nolleo.onna.domain.user.domain.entity.UserEntity;
-import com.nolleo.onna.domain.user.domain.repository.UserJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,27 +25,27 @@ public class PostCommandService {
 
     private final PostRepository postRepository;
     private final ImageStoragePort imageStoragePort;
-    private final UserJpaRepository userJpaRepository;
+    private final UserLookupPort userLookupPort;
 
-    public PostDetailResponse createPost(Long userId, CreatePostRequest request) {
-        if (request.imageUrls() != null && request.imageUrls().size() > 5) {
+    public PostDetailResult createPost(Long userId, CreatePostCommand command) {
+        if (command.imageUrls() != null && command.imageUrls().size() > 5) {
             throw new BusinessException(PostErrorCode.TOO_MANY_IMAGES);
         }
 
         Post post = Post.create(
                 userId,
-                request.title(),
-                request.content(),
-                request.imageUrls() != null ? request.imageUrls() : List.of(),
-                request.categoryTags(),
-                request.districtTag()
+                command.title(),
+                command.content(),
+                command.imageUrls() != null ? command.imageUrls() : List.of(),
+                command.categoryTags(),
+                command.districtTag()
         );
 
         Post saved = postRepository.save(post);
-        return toDetailResponse(saved, false);
+        return toDetailResult(saved, false);
     }
 
-    public PostDetailResponse updatePost(Long userId, Long postId, UpdatePostRequest request) {
+    public PostDetailResult updatePost(Long userId, Long postId, UpdatePostCommand command) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException(PostErrorCode.POST_NOT_FOUND));
 
@@ -52,24 +53,22 @@ public class PostCommandService {
             throw new BusinessException(PostErrorCode.POST_ACCESS_DENIED);
         }
 
-        if (request.imageUrls() != null && request.imageUrls().size() > 5) {
+        if (command.imageUrls() != null && command.imageUrls().size() > 5) {
             throw new BusinessException(PostErrorCode.TOO_MANY_IMAGES);
         }
 
-        // 삭제된 이미지 S3에서 제거
         List<String> oldImageUrls = post.getImageUrls() != null ? post.getImageUrls() : List.of();
-        List<String> newImageUrls = request.imageUrls() != null ? request.imageUrls() : List.of();
+        List<String> newImageUrls = command.imageUrls() != null ? command.imageUrls() : List.of();
 
         List<String> deletedUrls = new ArrayList<>(oldImageUrls);
         deletedUrls.removeAll(newImageUrls);
-        for (String url : deletedUrls) {
-            imageStoragePort.delete(url);
-        }
 
-        post.update(request.title(), request.content(), newImageUrls, request.categoryTags(), request.districtTag());
-
+        post.update(command.title(), command.content(), newImageUrls, command.categoryTags(), command.districtTag());
         Post updated = postRepository.update(postId, post);
-        return toDetailResponse(updated, false);
+
+        deleteFromS3AfterCommit(deletedUrls);
+
+        return toDetailResult(updated, false);
     }
 
     public void deletePost(Long userId, Long postId) {
@@ -80,37 +79,30 @@ public class PostCommandService {
             throw new BusinessException(PostErrorCode.POST_ACCESS_DENIED);
         }
 
-        // S3 이미지 삭제
-        if (post.getImageUrls() != null) {
-            for (String url : post.getImageUrls()) {
-                imageStoragePort.delete(url);
-            }
-        }
-
-        // soft delete는 엔티티 레벨에서 처리 (JPA로 직접)
-        // PostRepository를 통해 soft delete 처리
         postRepository.softDelete(postId, userId.toString());
+
+        List<String> urlsToDelete = post.getImageUrls() != null ? new ArrayList<>(post.getImageUrls()) : List.of();
+        deleteFromS3AfterCommit(urlsToDelete);
     }
 
-    private PostDetailResponse toDetailResponse(Post post, boolean isLiked) {
-        UserEntity user = userJpaRepository.findById(post.getUserId()).orElse(null);
-        String nickname = user != null ? user.getNickname() : "알 수 없음";
-        String profileImageUrl = user != null ? user.getProfileImageUrl() : null;
+    private void deleteFromS3AfterCommit(List<String> urls) {
+        if (urls.isEmpty()) return;
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    urls.forEach(imageStoragePort::delete);
+                }
+            });
+        } else {
+            urls.forEach(imageStoragePort::delete);
+        }
+    }
 
-        return new PostDetailResponse(
-                post.getId(),
-                post.getTitle(),
-                post.getContent(),
-                new PostDetailResponse.AuthorInfo(nickname, profileImageUrl),
-                post.getCategoryTags(),
-                post.getDistrictTag(),
-                post.getImageUrls(),
-                post.getLikeCount(),
-                isLiked,
-                post.getViewCount(),
-                post.getCommentCount(),
-                post.getCreatedAt(),
-                post.getUpdatedAt()
-        );
+    private PostDetailResult toDetailResult(Post post, boolean isLiked) {
+        UserLookupPort.UserProfile profile = userLookupPort.findById(post.getUserId()).orElse(null);
+        String nickname = profile != null ? profile.nickname() : "알 수 없음";
+        String profileImageUrl = profile != null ? profile.profileImageUrl() : null;
+        return new PostDetailResult(post, nickname, profileImageUrl, isLiked);
     }
 }

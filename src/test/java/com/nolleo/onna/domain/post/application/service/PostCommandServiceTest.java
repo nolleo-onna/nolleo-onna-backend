@@ -1,17 +1,16 @@
 package com.nolleo.onna.domain.post.application.service;
 
+import com.nolleo.onna.common.application.port.UserLookupPort;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.common.infrastructure.s3.ImageStoragePort;
+import com.nolleo.onna.domain.post.application.dto.CreatePostCommand;
+import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
+import com.nolleo.onna.domain.post.application.dto.UpdatePostCommand;
 import com.nolleo.onna.domain.post.domain.exception.PostErrorCode;
 import com.nolleo.onna.domain.post.domain.model.Post;
 import com.nolleo.onna.domain.post.domain.model.vo.PostCategoryTag;
 import com.nolleo.onna.domain.post.domain.model.vo.PostDistrictTag;
 import com.nolleo.onna.domain.post.domain.repository.PostRepository;
-import com.nolleo.onna.domain.post.presentation.dto.request.CreatePostRequest;
-import com.nolleo.onna.domain.post.presentation.dto.request.UpdatePostRequest;
-import com.nolleo.onna.domain.post.presentation.dto.response.PostDetailResponse;
-import com.nolleo.onna.domain.user.domain.entity.UserEntity;
-import com.nolleo.onna.domain.user.domain.repository.UserJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,18 +38,16 @@ class PostCommandServiceTest {
 
     @Mock PostRepository postRepository;
     @Mock ImageStoragePort imageStoragePort;
-    @Mock UserJpaRepository userJpaRepository;
+    @Mock UserLookupPort userLookupPort;
 
     @InjectMocks PostCommandService postCommandService;
 
-    private UserEntity mockUser;
+    private UserLookupPort.UserProfile mockProfile;
     private Post savedPost;
 
     @BeforeEach
     void setUp() {
-        mockUser = mock(UserEntity.class);
-        given(mockUser.getNickname()).willReturn("테스터");
-        given(mockUser.getProfileImageUrl()).willReturn("https://example.com/profile.jpg");
+        mockProfile = new UserLookupPort.UserProfile("테스터", "https://example.com/profile.jpg");
 
         savedPost = Post.restore(
                 1L, 1L, "제목", "내용",
@@ -66,7 +63,7 @@ class PostCommandServiceTest {
     @DisplayName("유효한 요청으로 게시글을 정상적으로 작성한다")
     void createPost_success() {
         // given
-        CreatePostRequest request = new CreatePostRequest(
+        CreatePostCommand command = new CreatePostCommand(
                 "제목", "내용",
                 List.of(PostCategoryTag.CAFE),
                 PostDistrictTag.HAEUNDAE_GU,
@@ -74,15 +71,15 @@ class PostCommandServiceTest {
         );
 
         given(postRepository.save(any(Post.class))).willReturn(savedPost);
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        PostDetailResponse response = postCommandService.createPost(1L, request);
+        PostDetailResult result = postCommandService.createPost(1L, command);
 
         // then
-        assertThat(response.title()).isEqualTo("제목");
-        assertThat(response.content()).isEqualTo("내용");
-        assertThat(response.author().nickname()).isEqualTo("테스터");
+        assertThat(result.post().getTitle()).isEqualTo("제목");
+        assertThat(result.post().getContent()).isEqualTo("내용");
+        assertThat(result.authorNickname()).isEqualTo("테스터");
         verify(postRepository, times(1)).save(any(Post.class));
     }
 
@@ -91,7 +88,7 @@ class PostCommandServiceTest {
     void createPost_throwsException_whenTooManyImages() {
         // given
         List<String> sixImages = List.of("u1", "u2", "u3", "u4", "u5", "u6");
-        CreatePostRequest request = new CreatePostRequest(
+        CreatePostCommand command = new CreatePostCommand(
                 "제목", "내용",
                 List.of(PostCategoryTag.CAFE),
                 PostDistrictTag.HAEUNDAE_GU,
@@ -99,7 +96,7 @@ class PostCommandServiceTest {
         );
 
         // when & then
-        assertThatThrownBy(() -> postCommandService.createPost(1L, request))
+        assertThatThrownBy(() -> postCommandService.createPost(1L, command))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(PostErrorCode.TOO_MANY_IMAGES));
@@ -111,7 +108,7 @@ class PostCommandServiceTest {
     @DisplayName("본인 게시글을 정상적으로 수정한다")
     void updatePost_success() {
         // given
-        UpdatePostRequest request = new UpdatePostRequest(
+        UpdatePostCommand command = new UpdatePostCommand(
                 "수정 제목", "수정 내용",
                 List.of(PostCategoryTag.RESTAURANT),
                 PostDistrictTag.JUNG_GU,
@@ -129,13 +126,13 @@ class PostCommandServiceTest {
 
         given(postRepository.findById(1L)).willReturn(Optional.of(savedPost));
         given(postRepository.update(eq(1L), any(Post.class))).willReturn(updatedPost);
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        PostDetailResponse response = postCommandService.updatePost(1L, 1L, request);
+        PostDetailResult result = postCommandService.updatePost(1L, 1L, command);
 
         // then
-        assertThat(response.title()).isEqualTo("수정 제목");
+        assertThat(result.post().getTitle()).isEqualTo("수정 제목");
         verify(postRepository, times(1)).update(eq(1L), any(Post.class));
     }
 
@@ -143,13 +140,13 @@ class PostCommandServiceTest {
     @DisplayName("존재하지 않는 게시글 수정 시 POST_NOT_FOUND 예외를 던진다")
     void updatePost_throwsException_whenPostNotFound() {
         // given
-        UpdatePostRequest request = new UpdatePostRequest(
+        UpdatePostCommand command = new UpdatePostCommand(
                 "수정 제목", "수정 내용", List.of(), null, List.of()
         );
         given(postRepository.findById(999L)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> postCommandService.updatePost(1L, 999L, request))
+        assertThatThrownBy(() -> postCommandService.updatePost(1L, 999L, command))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(PostErrorCode.POST_NOT_FOUND));
@@ -159,13 +156,13 @@ class PostCommandServiceTest {
     @DisplayName("다른 사람의 게시글 수정 시 POST_ACCESS_DENIED 예외를 던진다")
     void updatePost_throwsException_whenNotOwner() {
         // given
-        UpdatePostRequest request = new UpdatePostRequest(
+        UpdatePostCommand command = new UpdatePostCommand(
                 "수정 제목", "수정 내용", List.of(), null, List.of()
         );
         given(postRepository.findById(1L)).willReturn(Optional.of(savedPost)); // userId=1
 
         // when & then — userId=2가 시도
-        assertThatThrownBy(() -> postCommandService.updatePost(2L, 1L, request))
+        assertThatThrownBy(() -> postCommandService.updatePost(2L, 1L, command))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(PostErrorCode.POST_ACCESS_DENIED));
@@ -182,7 +179,7 @@ class PostCommandServiceTest {
                 0, 0, 0, OffsetDateTime.now(), null
         );
 
-        UpdatePostRequest request = new UpdatePostRequest(
+        UpdatePostCommand command = new UpdatePostCommand(
                 "수정 제목", "수정 내용", List.of(PostCategoryTag.CAFE),
                 PostDistrictTag.HAEUNDAE_GU,
                 List.of("https://s3.example.com/image1.jpg")  // image2 제거
@@ -197,12 +194,12 @@ class PostCommandServiceTest {
 
         given(postRepository.findById(1L)).willReturn(Optional.of(postWithTwoImages));
         given(postRepository.update(eq(1L), any(Post.class))).willReturn(updatedPost);
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        postCommandService.updatePost(1L, 1L, request);
+        postCommandService.updatePost(1L, 1L, command);
 
-        // then — image2만 S3에서 삭제
+        // then — TransactionSynchronizationManager 비활성 상태이므로 즉시 삭제
         verify(imageStoragePort, times(1)).delete("https://s3.example.com/image2.jpg");
         verify(imageStoragePort, never()).delete("https://s3.example.com/image1.jpg");
     }
@@ -218,7 +215,7 @@ class PostCommandServiceTest {
         // when
         postCommandService.deletePost(1L, 1L);
 
-        // then
+        // then — TransactionSynchronizationManager 비활성 상태이므로 즉시 삭제
         verify(imageStoragePort, times(1)).delete("https://s3.example.com/image1.jpg");
         verify(postRepository, times(1)).softDelete(1L, "1");
     }

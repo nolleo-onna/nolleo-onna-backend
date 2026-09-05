@@ -3,16 +3,18 @@ package com.nolleo.onna.domain.post.presentation.controller;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.common.security.AuthPrincipal;
 import com.nolleo.onna.common.security.jwt.JwtProvider;
+import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
+import com.nolleo.onna.domain.post.application.dto.PostPopularResult;
+import com.nolleo.onna.domain.post.application.dto.PostSummaryResult;
 import com.nolleo.onna.domain.post.application.service.PostCommandService;
 import com.nolleo.onna.domain.post.application.service.PostLikeService;
 import com.nolleo.onna.domain.post.application.service.PostQueryService;
 import com.nolleo.onna.domain.post.application.service.PostReportService;
 import com.nolleo.onna.domain.post.domain.exception.PostErrorCode;
+import com.nolleo.onna.domain.post.domain.model.Post;
 import com.nolleo.onna.domain.post.domain.model.vo.PostCategoryTag;
 import com.nolleo.onna.domain.post.domain.model.vo.PostDistrictTag;
-import com.nolleo.onna.domain.post.presentation.dto.response.PostDetailResponse;
 import com.nolleo.onna.domain.post.presentation.dto.response.PostLikeToggleResponse;
-import com.nolleo.onna.domain.post.presentation.dto.response.PostPopularResponse;
 import com.nolleo.onna.domain.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -58,23 +61,23 @@ class PostControllerTest {
                 principal, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
     }
 
-    private PostDetailResponse sampleDetailResponse() {
-        return new PostDetailResponse(
-                1L, "제목", "내용",
-                new PostDetailResponse.AuthorInfo("테스터", null),
+    private PostDetailResult sampleDetailResult() {
+        Post post = Post.restore(
+                1L, 1L, "제목", "내용",
+                List.of("https://s3.example.com/img1.jpg"),
                 List.of(PostCategoryTag.CAFE),
                 PostDistrictTag.HAEUNDAE_GU,
-                List.of("https://s3.example.com/img1.jpg"),
-                0, false, 0, 0,
+                0, 0, 0,
                 OffsetDateTime.now(), null
         );
+        return new PostDetailResult(post, "테스터", null, false);
     }
 
     @Test
     @DisplayName("POST /api/v1/posts - 유효한 요청으로 게시글 작성 시 201을 반환한다")
     void createPost_returns201_whenValidRequest() throws Exception {
         // given
-        given(postCommandService.createPost(anyLong(), any())).willReturn(sampleDetailResponse());
+        given(postCommandService.createPost(anyLong(), any())).willReturn(sampleDetailResult());
 
         // when & then
         mockMvc.perform(post("/api/v1/posts")
@@ -117,7 +120,7 @@ class PostControllerTest {
     @DisplayName("GET /api/v1/posts/{postId} - 게시글 단건 조회 시 200을 반환한다")
     void getPost_returns200() throws Exception {
         // given
-        given(postQueryService.getPost(anyLong(), any())).willReturn(sampleDetailResponse());
+        given(postQueryService.getPost(anyLong(), any())).willReturn(sampleDetailResult());
 
         // when & then
         mockMvc.perform(get("/api/v1/posts/1"))
@@ -156,7 +159,7 @@ class PostControllerTest {
     @DisplayName("GET /api/v1/posts/popular - 인기 게시글 조회 시 200을 반환한다")
     void getPopularPosts_returns200() throws Exception {
         // given
-        PostPopularResponse popular = new PostPopularResponse(
+        PostPopularResult popular = new PostPopularResult(
                 1L, "제목", "https://s3.example.com/img1.jpg", 10, false
         );
         given(postQueryService.getPopularPosts(any())).willReturn(List.of(popular));
@@ -172,7 +175,7 @@ class PostControllerTest {
     @DisplayName("PATCH /api/v1/posts/{postId} - 본인 게시글 수정 시 200을 반환한다")
     void updatePost_returns200() throws Exception {
         // given
-        given(postCommandService.updatePost(anyLong(), anyLong(), any())).willReturn(sampleDetailResponse());
+        given(postCommandService.updatePost(anyLong(), anyLong(), any())).willReturn(sampleDetailResult());
 
         // when & then
         mockMvc.perform(patch("/api/v1/posts/1")

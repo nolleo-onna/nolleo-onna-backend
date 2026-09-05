@@ -1,15 +1,14 @@
 package com.nolleo.onna.domain.comment.application.service;
 
+import com.nolleo.onna.common.application.port.UserLookupPort;
 import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.comment.application.dto.CommentResult;
+import com.nolleo.onna.domain.comment.application.dto.CreateCommentCommand;
 import com.nolleo.onna.domain.comment.domain.exception.CommentErrorCode;
 import com.nolleo.onna.domain.comment.domain.model.Comment;
 import com.nolleo.onna.domain.comment.domain.repository.CommentRepository;
-import com.nolleo.onna.domain.comment.presentation.dto.request.CreateCommentRequest;
-import com.nolleo.onna.domain.comment.presentation.dto.response.CommentResponse;
 import com.nolleo.onna.domain.post.domain.exception.PostErrorCode;
 import com.nolleo.onna.domain.post.domain.repository.PostRepository;
-import com.nolleo.onna.domain.user.domain.entity.UserEntity;
-import com.nolleo.onna.domain.user.domain.repository.UserJpaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,33 +22,37 @@ public class CommentCommandService {
 
     private final CommentRepository commentRepository;
     private final PostRepository postRepository;
-    private final UserJpaRepository userJpaRepository;
+    private final UserLookupPort userLookupPort;
 
-    public CommentResponse createComment(Long userId, CreateCommentRequest request) {
-        postRepository.findById(request.postId())
+    public CommentResult createComment(Long userId, CreateCommentCommand command) {
+        postRepository.findById(command.postId())
                 .orElseThrow(() -> new BusinessException(PostErrorCode.POST_NOT_FOUND));
 
-        if (request.parentCommentId() != null) {
-            Comment parent = commentRepository.findById(request.parentCommentId())
+        if (command.parentCommentId() != null) {
+            Comment parent = commentRepository.findById(command.parentCommentId())
                     .orElseThrow(() -> new BusinessException(CommentErrorCode.COMMENT_NOT_FOUND));
 
             if (parent.getParentCommentId() != null) {
                 throw new BusinessException(CommentErrorCode.INVALID_PARENT_COMMENT);
             }
+            if (!parent.getPostId().equals(command.postId())) {
+                throw new BusinessException(CommentErrorCode.COMMENT_NOT_FOUND);
+            }
         }
 
-        Comment comment = Comment.create(request.postId(), userId, request.parentCommentId(), request.content());
+        Comment comment = Comment.create(command.postId(), userId, command.parentCommentId(), command.content());
         Comment saved = commentRepository.save(comment);
 
-        postRepository.incrementCommentCount(request.postId());
+        postRepository.incrementCommentCount(command.postId());
 
-        UserEntity user = userJpaRepository.findById(userId).orElse(null);
-        String nickname = user != null ? user.getNickname() : "알 수 없음";
-        String profileImageUrl = user != null ? user.getProfileImageUrl() : null;
+        UserLookupPort.UserProfile profile = userLookupPort.findById(userId).orElse(null);
+        String nickname = profile != null ? profile.nickname() : "알 수 없음";
+        String profileImageUrl = profile != null ? profile.profileImageUrl() : null;
 
-        return new CommentResponse(
+        return new CommentResult(
                 saved.getId(),
-                new CommentResponse.AuthorInfo(nickname, profileImageUrl),
+                nickname,
+                profileImageUrl,
                 saved.getContent(),
                 saved.isDeleted(),
                 saved.getParentCommentId(),

@@ -24,7 +24,7 @@ public class CommentRepositoryImpl implements CommentRepository {
 
     @Override
     public Optional<Comment> findById(Long id) {
-        return commentJpaRepository.findById(id).map(CommentEntity::toDomain);
+        return commentJpaRepository.findByIdAndDeletedFalse(id).map(CommentEntity::toDomain);
     }
 
     @Override

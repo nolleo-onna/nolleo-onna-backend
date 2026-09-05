@@ -10,11 +10,13 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Entity
+@DynamicUpdate
 @Table(name = "pt_posts", indexes = {
         @Index(name = "idx_pt_posts_user_id", columnList = "user_id"),
         @Index(name = "idx_pt_posts_created_at", columnList = "created_at DESC"),

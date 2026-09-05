@@ -1,6 +1,10 @@
 package com.nolleo.onna.domain.post.application.service;
 
+import com.nolleo.onna.common.application.port.UserLookupPort;
 import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
+import com.nolleo.onna.domain.post.application.dto.PostPopularResult;
+import com.nolleo.onna.domain.post.application.dto.PostSummaryResult;
 import com.nolleo.onna.domain.post.domain.exception.PostErrorCode;
 import com.nolleo.onna.domain.post.domain.model.Post;
 import com.nolleo.onna.domain.post.domain.model.vo.PostCategoryTag;
@@ -8,11 +12,6 @@ import com.nolleo.onna.domain.post.domain.model.vo.PostDistrictTag;
 import com.nolleo.onna.domain.post.domain.repository.PostLikeRepository;
 import com.nolleo.onna.domain.post.domain.repository.PostRepository;
 import com.nolleo.onna.domain.post.domain.repository.PostSearchCondition;
-import com.nolleo.onna.domain.post.presentation.dto.response.PostDetailResponse;
-import com.nolleo.onna.domain.post.presentation.dto.response.PostPopularResponse;
-import com.nolleo.onna.domain.post.presentation.dto.response.PostSummaryResponse;
-import com.nolleo.onna.domain.user.domain.entity.UserEntity;
-import com.nolleo.onna.domain.user.domain.repository.UserJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -45,12 +44,12 @@ class PostQueryServiceTest {
 
     @Mock PostRepository postRepository;
     @Mock PostLikeRepository postLikeRepository;
-    @Mock UserJpaRepository userJpaRepository;
+    @Mock UserLookupPort userLookupPort;
 
     @InjectMocks PostQueryService postQueryService;
 
     private Post post;
-    private UserEntity mockUser;
+    private UserLookupPort.UserProfile mockProfile;
 
     @BeforeEach
     void setUp() {
@@ -63,9 +62,7 @@ class PostQueryServiceTest {
                 OffsetDateTime.now(), null
         );
 
-        mockUser = mock(UserEntity.class);
-        given(mockUser.getNickname()).willReturn("테스터");
-        given(mockUser.getProfileImageUrl()).willReturn("https://example.com/profile.jpg");
+        mockProfile = new UserLookupPort.UserProfile("테스터", "https://example.com/profile.jpg");
     }
 
     @Test
@@ -74,16 +71,16 @@ class PostQueryServiceTest {
         // given
         given(postRepository.findById(1L)).willReturn(Optional.of(post));
         given(postLikeRepository.existsByPostIdAndUserId(1L, 1L)).willReturn(false);
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        PostDetailResponse response = postQueryService.getPost(1L, 1L);
+        PostDetailResult result = postQueryService.getPost(1L, 1L);
 
         // then
-        assertThat(response.id()).isEqualTo(1L);
-        assertThat(response.title()).isEqualTo("제목");
-        assertThat(response.isLiked()).isFalse();
-        assertThat(response.imageUrls()).hasSize(1);
+        assertThat(result.post().getId()).isEqualTo(1L);
+        assertThat(result.post().getTitle()).isEqualTo("제목");
+        assertThat(result.isLiked()).isFalse();
+        assertThat(result.post().getImageUrls()).hasSize(1);
         verify(postRepository, times(1)).incrementViewCount(1L);
     }
 
@@ -93,13 +90,13 @@ class PostQueryServiceTest {
         // given
         given(postRepository.findById(1L)).willReturn(Optional.of(post));
         given(postLikeRepository.existsByPostIdAndUserId(1L, 1L)).willReturn(true);
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        PostDetailResponse response = postQueryService.getPost(1L, 1L);
+        PostDetailResult result = postQueryService.getPost(1L, 1L);
 
         // then
-        assertThat(response.isLiked()).isTrue();
+        assertThat(result.isLiked()).isTrue();
     }
 
     @Test
@@ -107,13 +104,13 @@ class PostQueryServiceTest {
     void getPost_returnsIsLikedFalse_whenUserIsNull() {
         // given
         given(postRepository.findById(1L)).willReturn(Optional.of(post));
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        PostDetailResponse response = postQueryService.getPost(1L, null);
+        PostDetailResult result = postQueryService.getPost(1L, null);
 
         // then
-        assertThat(response.isLiked()).isFalse();
+        assertThat(result.isLiked()).isFalse();
         verify(postLikeRepository, never()).existsByPostIdAndUserId(anyLong(), anyLong());
     }
 
@@ -137,10 +134,10 @@ class PostQueryServiceTest {
         Page<Post> postPage = new PageImpl<>(List.of(post));
         given(postRepository.findAll(any(PostSearchCondition.class), any())).willReturn(postPage);
         given(postLikeRepository.findLikedPostIds(anyLong(), anyList())).willReturn(Set.of());
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        Page<PostSummaryResponse> result = postQueryService.getPosts(
+        Page<PostSummaryResult> result = postQueryService.getPosts(
                 new PostSearchCondition(null, null),
                 PageRequest.of(0, 10),
                 1L
@@ -148,11 +145,12 @@ class PostQueryServiceTest {
 
         // then
         assertThat(result.getContent()).hasSize(1);
-        assertThat(result.getContent().get(0).hasImage()).isTrue();
+        PostSummaryResult summary = result.getContent().get(0);
+        assertThat(summary.post().getImageUrls()).isNotEmpty();
     }
 
     @Test
-    @DisplayName("게시글 목록 조회 시 이미지가 없는 게시글은 hasImage: false를 반환한다")
+    @DisplayName("게시글 목록 조회 시 이미지가 없는 게시글은 imageUrls가 비어있다")
     void getPosts_hasImageFalse_whenNoImages() {
         // given
         Post noImagePost = Post.restore(
@@ -163,17 +161,17 @@ class PostQueryServiceTest {
         Page<Post> postPage = new PageImpl<>(List.of(noImagePost));
         given(postRepository.findAll(any(PostSearchCondition.class), any())).willReturn(postPage);
         given(postLikeRepository.findLikedPostIds(anyLong(), anyList())).willReturn(Set.of());
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        Page<PostSummaryResponse> result = postQueryService.getPosts(
+        Page<PostSummaryResult> result = postQueryService.getPosts(
                 new PostSearchCondition(null, null),
                 PageRequest.of(0, 10),
                 1L
         );
 
         // then
-        assertThat(result.getContent().get(0).hasImage()).isFalse();
+        assertThat(result.getContent().get(0).post().getImageUrls()).isEmpty();
     }
 
     @Test
@@ -182,10 +180,10 @@ class PostQueryServiceTest {
         // given
         Page<Post> postPage = new PageImpl<>(List.of(post));
         given(postRepository.findAll(any(PostSearchCondition.class), any())).willReturn(postPage);
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        Page<PostSummaryResponse> result = postQueryService.getPosts(
+        Page<PostSummaryResult> result = postQueryService.getPosts(
                 new PostSearchCondition(null, null),
                 PageRequest.of(0, 10),
                 null
@@ -204,11 +202,11 @@ class PostQueryServiceTest {
         given(postLikeRepository.findLikedPostIds(anyLong(), anyList())).willReturn(Set.of(1L));
 
         // when
-        List<PostPopularResponse> result = postQueryService.getPopularPosts(1L);
+        List<PostPopularResult> result = postQueryService.getPopularPosts(1L);
 
         // then
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).thumbnailImageUrl()).isEqualTo("https://s3.example.com/img1.jpg");
+        assertThat(result.get(0).thumbnail()).isEqualTo("https://s3.example.com/img1.jpg");
         assertThat(result.get(0).isLiked()).isTrue();
     }
 
@@ -219,7 +217,7 @@ class PostQueryServiceTest {
         given(postRepository.findPopular(5)).willReturn(List.of(post));
 
         // when
-        List<PostPopularResponse> result = postQueryService.getPopularPosts(null);
+        List<PostPopularResult> result = postQueryService.getPopularPosts(null);
 
         // then
         assertThat(result.get(0).isLiked()).isFalse();

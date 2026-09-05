@@ -1,18 +1,17 @@
 package com.nolleo.onna.domain.comment.application.service;
 
+import com.nolleo.onna.common.application.port.UserLookupPort;
 import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.comment.application.dto.CommentResult;
+import com.nolleo.onna.domain.comment.application.dto.CreateCommentCommand;
 import com.nolleo.onna.domain.comment.domain.exception.CommentErrorCode;
 import com.nolleo.onna.domain.comment.domain.model.Comment;
 import com.nolleo.onna.domain.comment.domain.repository.CommentRepository;
-import com.nolleo.onna.domain.comment.presentation.dto.request.CreateCommentRequest;
-import com.nolleo.onna.domain.comment.presentation.dto.response.CommentResponse;
 import com.nolleo.onna.domain.post.domain.exception.PostErrorCode;
 import com.nolleo.onna.domain.post.domain.model.Post;
 import com.nolleo.onna.domain.post.domain.model.vo.PostCategoryTag;
 import com.nolleo.onna.domain.post.domain.model.vo.PostDistrictTag;
 import com.nolleo.onna.domain.post.domain.repository.PostRepository;
-import com.nolleo.onna.domain.user.domain.entity.UserEntity;
-import com.nolleo.onna.domain.user.domain.repository.UserJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,13 +38,13 @@ class CommentCommandServiceTest {
 
     @Mock CommentRepository commentRepository;
     @Mock PostRepository postRepository;
-    @Mock UserJpaRepository userJpaRepository;
+    @Mock UserLookupPort userLookupPort;
 
     @InjectMocks CommentCommandService commentCommandService;
 
     private Post post;
     private Comment topLevelComment;
-    private UserEntity mockUser;
+    private UserLookupPort.UserProfile mockProfile;
 
     @BeforeEach
     void setUp() {
@@ -61,30 +60,28 @@ class CommentCommandServiceTest {
                 OffsetDateTime.now(), null
         );
 
-        mockUser = mock(UserEntity.class);
-        given(mockUser.getNickname()).willReturn("테스터");
-        given(mockUser.getProfileImageUrl()).willReturn(null);
+        mockProfile = new UserLookupPort.UserProfile("테스터", null);
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
     }
 
     @Test
     @DisplayName("최상위 댓글을 정상적으로 작성한다")
     void createComment_topLevel_success() {
         // given
-        CreateCommentRequest request = new CreateCommentRequest(1L, null, "댓글 내용");
+        CreateCommentCommand command = new CreateCommentCommand(1L, null, "댓글 내용");
         Comment saved = Comment.restore(
                 20L, 1L, 1L, null, "댓글 내용", false, OffsetDateTime.now(), null
         );
 
         given(postRepository.findById(1L)).willReturn(Optional.of(post));
         given(commentRepository.save(any(Comment.class))).willReturn(saved);
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
 
         // when
-        CommentResponse response = commentCommandService.createComment(1L, request);
+        CommentResult result = commentCommandService.createComment(1L, command);
 
         // then
-        assertThat(response.content()).isEqualTo("댓글 내용");
-        assertThat(response.parentCommentId()).isNull();
+        assertThat(result.content()).isEqualTo("댓글 내용");
+        assertThat(result.parentCommentId()).isNull();
         verify(postRepository, times(1)).incrementCommentCount(1L);
     }
 
@@ -92,7 +89,7 @@ class CommentCommandServiceTest {
     @DisplayName("대댓글을 정상적으로 작성한다")
     void createComment_reply_success() {
         // given
-        CreateCommentRequest request = new CreateCommentRequest(1L, 10L, "대댓글 내용");
+        CreateCommentCommand command = new CreateCommentCommand(1L, 10L, "대댓글 내용");
         Comment saved = Comment.restore(
                 21L, 1L, 1L, 10L, "대댓글 내용", false, OffsetDateTime.now(), null
         );
@@ -100,14 +97,13 @@ class CommentCommandServiceTest {
         given(postRepository.findById(1L)).willReturn(Optional.of(post));
         given(commentRepository.findById(10L)).willReturn(Optional.of(topLevelComment));
         given(commentRepository.save(any(Comment.class))).willReturn(saved);
-        given(userJpaRepository.findById(1L)).willReturn(Optional.of(mockUser));
 
         // when
-        CommentResponse response = commentCommandService.createComment(1L, request);
+        CommentResult result = commentCommandService.createComment(1L, command);
 
         // then
-        assertThat(response.content()).isEqualTo("대댓글 내용");
-        assertThat(response.parentCommentId()).isEqualTo(10L);
+        assertThat(result.content()).isEqualTo("대댓글 내용");
+        assertThat(result.parentCommentId()).isEqualTo(10L);
         verify(postRepository, times(1)).incrementCommentCount(1L);
     }
 
@@ -118,13 +114,13 @@ class CommentCommandServiceTest {
         Comment replyComment = Comment.restore(
                 21L, 1L, 1L, 10L, "대댓글", false, OffsetDateTime.now(), null
         );
-        CreateCommentRequest request = new CreateCommentRequest(1L, 21L, "대대댓글 시도");
+        CreateCommentCommand command = new CreateCommentCommand(1L, 21L, "대대댓글 시도");
 
         given(postRepository.findById(1L)).willReturn(Optional.of(post));
         given(commentRepository.findById(21L)).willReturn(Optional.of(replyComment));
 
         // when & then
-        assertThatThrownBy(() -> commentCommandService.createComment(1L, request))
+        assertThatThrownBy(() -> commentCommandService.createComment(1L, command))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(CommentErrorCode.INVALID_PARENT_COMMENT));
@@ -136,11 +132,11 @@ class CommentCommandServiceTest {
     @DisplayName("존재하지 않는 게시글에 댓글 작성 시 POST_NOT_FOUND 예외를 던진다")
     void createComment_throwsException_whenPostNotFound() {
         // given
-        CreateCommentRequest request = new CreateCommentRequest(999L, null, "댓글");
+        CreateCommentCommand command = new CreateCommentCommand(999L, null, "댓글");
         given(postRepository.findById(999L)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> commentCommandService.createComment(1L, request))
+        assertThatThrownBy(() -> commentCommandService.createComment(1L, command))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(PostErrorCode.POST_NOT_FOUND));
