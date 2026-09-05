@@ -1,0 +1,114 @@
+spring:
+  application:
+    name: onna
+  profiles:
+    active: docker
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+    open-in-view: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+    web:
+      pageable:
+        max-page-size: 100
+
+  # ── OAuth2 클라이언트 (백엔드 주도 패턴 A) ──────────────────────────────
+  # 로그인 시작: GET /oauth2/authorization/{google|kakao|naver}
+  # 콜백(자동):  /login/oauth2/code/{provider} → CustomOAuth2UserService → OAuth2SuccessHandler
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+            scope:
+              - profile
+              - email
+          kakao:
+            client-id: ${KAKAO_CLIENT_ID}
+            client-secret: ${KAKAO_CLIENT_SECRET}
+            client-authentication-method: client_secret_post
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/kakao"
+            scope:
+              - profile_nickname
+              - profile_image
+              - account_email
+            client-name: Kakao
+          naver:
+            client-id: ${NAVER_CLIENT_ID}
+            client-secret: ${NAVER_CLIENT_SECRET}
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/naver"
+            scope:
+              - nickname
+              - email
+              - profile_image
+            client-name: Naver
+        # 카카오/네이버는 표준 OIDC가 아니라 provider 엔드포인트 수동 지정 필요
+        provider:
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
+          naver:
+            authorization-uri: https://nid.naver.com/oauth2.0/authorize
+            token-uri: https://nid.naver.com/oauth2.0/token
+            user-info-uri: https://openapi.naver.com/v1/nid/me
+            user-name-attribute: response
+
+jwt:
+  secret: ${JWT_SECRET}
+  access-token-expiry-seconds: 3600       # 1시간
+  refresh-token-expiry-seconds: 2592000   # 30일
+
+# ── 앱 자체 설정 (인증) ────────────────────────────────────────────────
+app:
+  oauth2:
+    # 로그인 성공/실패 후 리다이렉트할 프론트 URL
+    success-redirect-uri: ${OAUTH_SUCCESS_REDIRECT_URI}
+    failure-redirect-uri: ${OAUTH_FAILURE_REDIRECT_URI}
+  cookie:
+    secure: ${COOKIE_SECURE}
+    same-site: ${COOKIE_SAME_SITE}
+    domain: ${COOKIE_DOMAIN}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS}
+
+external:
+  weather:
+    api-key: ${WEATHER_API_KEY}
+  congestion:
+    api-key: ${CONGESTION_API_KEY}
+
+ai:
+  gemini:
+    api-key: ${GEMINI_API_KEY}
+    model: gemini-3.1-flash-lite
+  openai:
+    api-key: ${OPENAI_API_KEY}
+    embedding-model: text-embedding-3-small
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs

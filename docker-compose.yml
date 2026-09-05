@@ -1,0 +1,56 @@
+services:
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: onna-redis
+    command: [ "redis-server", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru" ]
+    mem_limit: 768m
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot App ─────────────────────────────────────────────────────────
+  app:
+    build: .
+    container_name: onna-app
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JAVA_OPTS: "-Xmx2560m"
+    mem_limit: 3g
+    expose:
+      - "8080"
+
+  # ── Caddy (reverse proxy / 자동 HTTPS) ──────────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    container_name: onna-caddy
+    depends_on:
+      - app
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  redis_data:
+  caddy_data:
+  caddy_config:

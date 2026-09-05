@@ -1,0 +1,23 @@
+# Docker 환경 전용 프로파일 — docker-compose로 실행 시 SPRING_PROFILES_ACTIVE=docker 로 활성화됨.
+# DB/Redis 접속 정보는 docker-compose.yml의 environment에서 주입.
+
+# 리버스 프록시/로드밸런서 뒤에서 X-Forwarded-* 헤더로 원본 스킴·호스트를 복원 →
+# OAuth2 redirect-uri({baseUrl})가 프록시 내부 주소가 아닌 실제 접속 주소로 계산되게 함.
+server:
+  forward-headers-strategy: native
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # SecurityConfig는 /actuator/health만 permitAll → expose도 health로 한정(info는 인증 필요라 노출해도 401).
+        include: health
+  endpoint:
+    health:
+      show-details: always
