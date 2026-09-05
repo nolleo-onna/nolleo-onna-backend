@@ -1,8 +1,8 @@
-name: Deploy to Dev Server
+name: Deploy to Prod Server
 
 on:
   push:
-    branches: [ develop ]
+    branches: [ main ]
 
 jobs:
   deploy:
@@ -17,8 +17,8 @@ jobs:
           key: ${{ secrets.GCP_SSH_KEY }}
           script: |
             set -e
-            cd /home/hanleejss01212/nolleo-onna-backend
-            git fetch origin develop
-            git reset --hard origin/develop
+            cd /home/maeguming0000/nolleo-onna-backend
+            git fetch origin main
+            git reset --hard origin/main
             docker compose up --build -d
             docker image prune -f
