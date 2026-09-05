@@ -16,7 +16,9 @@ jobs:
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
           script: |
+            set -e
             cd /home/hanleejss01212/nolleo-onna-backend
-            git pull origin develop
+            git fetch origin develop
+            git reset --hard origin/develop
             docker compose up --build -d
             docker image prune -f
