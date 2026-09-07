@@ -37,18 +37,17 @@ public class S3Uploader implements ImageStoragePort {
             throw new BusinessException(ImageErrorCode.UPLOAD_FAILED);
         }
 
-        return "https://" + s3Properties.getBucket() + ".s3." + s3Properties.getRegion() + ".amazonaws.com/" + key;
+        return publicUrlPrefix() + key;
     }
 
     @Override
     public void delete(String imageUrl) {
         if (imageUrl == null || imageUrl.isBlank()) return;
-        int idx = imageUrl.indexOf("posts/");
-        if (idx == -1) {
-            idx = imageUrl.indexOf("images/");
-        }
-        if (idx == -1) return;
-        String key = imageUrl.substring(idx);
+
+        String prefix = publicUrlPrefix();
+        if (!imageUrl.startsWith(prefix)) return;
+        String key = imageUrl.substring(prefix.length());
+        if (key.isBlank()) return;
 
         DeleteObjectRequest request = DeleteObjectRequest.builder()
                 .bucket(s3Properties.getBucket())
@@ -56,6 +55,11 @@ public class S3Uploader implements ImageStoragePort {
                 .build();
 
         s3Client.deleteObject(request);
+    }
+
+    private String publicUrlPrefix() {
+        String base = s3Properties.getPublicBaseUrl();
+        return base.endsWith("/") ? base : base + "/";
     }
 
     private String extractExtension(String filename) {

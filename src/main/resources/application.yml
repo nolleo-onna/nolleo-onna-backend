@@ -100,6 +100,16 @@ external:
   congestion:
     api-key: ${CONGESTION_API_KEY}
 
+# S3 호환 오브젝트 스토리지 (현재 GCS 상호 운용성 모드 사용)
+aws:
+  s3:
+    region: ${AWS_S3_REGION}
+    bucket: ${AWS_S3_BUCKET}
+    access-key: ${AWS_S3_ACCESS_KEY}
+    secret-key: ${AWS_S3_SECRET_KEY}
+    endpoint: ${AWS_S3_ENDPOINT}
+    public-base-url: ${AWS_S3_PUBLIC_BASE_URL}
+
 ai:
   gemini:
     api-key: ${GEMINI_API_KEY}
