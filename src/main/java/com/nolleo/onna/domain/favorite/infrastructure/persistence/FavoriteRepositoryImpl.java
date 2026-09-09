@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 
 @Repository
@@ -40,5 +41,10 @@ public class FavoriteRepositoryImpl implements FavoriteRepository {
     @Override
     public boolean existsByUserIdAndMapPlaceId(Long userId, Long mapPlaceId) {
         return jpaRepository.existsByUserIdAndMapPlaceId(userId, mapPlaceId);
+    }
+
+    @Override
+    public long countByUserIdBetween(Long userId, OffsetDateTime start, OffsetDateTime end) {
+        return jpaRepository.countByUserIdAndCreatedAtBetween(userId, start, end);
     }
 }

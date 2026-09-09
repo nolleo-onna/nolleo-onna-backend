@@ -28,10 +28,12 @@ public class FavoriteCommandService {
 
         if (existing.isPresent()) {
             favoriteRepository.delete(existing.get());
+            mapPlaceRepository.decrementFavoriteCount(mapPlaceId);
             return new FavoriteToggleResponse(mapPlaceId, false);
         }
 
         favoriteRepository.save(new Favorite(null, userId, mapPlaceId, null));
+        mapPlaceRepository.incrementFavoriteCount(mapPlaceId);
         return new FavoriteToggleResponse(mapPlaceId, true);
     }
 }

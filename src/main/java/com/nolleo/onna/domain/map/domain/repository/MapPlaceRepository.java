@@ -26,8 +26,8 @@ public interface MapPlaceRepository {
     /** 지정 ID 목록의 장소를 distance 순 정렬하면서 각 장소까지의 거리(m)를 id → distance 맵으로 반환 */
     Map<Long, Integer> findDistancesFromPoint(List<Long> ids, double lat, double lon);
 
-    /** 구·카테고리·예산 조건에 맞는 활성 장소 페이징 목록 */
-    Page<MapPlace> findByFilterPaged(String district, PlaceCategory category, Integer maxBudget, Pageable pageable);
+    /** 구·카테고리·예산·키워드 조건에 맞는 활성 장소 페이징 목록 (VE 우선 정렬) */
+    Page<MapPlace> findByFilterPaged(String district, PlaceCategory category, Integer maxBudget, String keyword, Pageable pageable);
 
     /** id로 장소 단건 조회 */
     Optional<MapPlace> findById(Long id);
@@ -49,4 +49,10 @@ public interface MapPlaceRepository {
 
     /** 리뷰 수정 시 avg_rating만 재계산 (review_count 변동 없음) */
     void updateAvgRating(Long mapPlaceId, int oldRating, int newRating);
+
+    /** 찜 추가 시 favorite_count 원자적 증가 */
+    void incrementFavoriteCount(Long mapPlaceId);
+
+    /** 찜 취소 시 favorite_count 원자적 감소 (0 미만 방지) */
+    void decrementFavoriteCount(Long mapPlaceId);
 }

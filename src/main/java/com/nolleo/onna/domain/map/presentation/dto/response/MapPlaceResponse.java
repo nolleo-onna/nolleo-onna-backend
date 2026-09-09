@@ -49,7 +49,10 @@ public record MapPlaceResponse(
         BigDecimal avgRating,
 
         @Schema(description = "리뷰 수", example = "42")
-        long reviewCount
+        long reviewCount,
+
+        @Schema(description = "찜 수", example = "128")
+        long favoriteCount
 
 ) {
     public static MapPlaceResponse from(MapPlace mapPlace) {
@@ -66,7 +69,8 @@ public record MapPlaceResponse(
                 mapPlace.getMinPrice(),
                 mapPlace.isFree(),
                 mapPlace.getAvgRating(),
-                mapPlace.getReviewCount()
+                mapPlace.getReviewCount(),
+                mapPlace.getFavoriteCount()
         );
     }
 }

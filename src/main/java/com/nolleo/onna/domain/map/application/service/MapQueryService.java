@@ -26,8 +26,9 @@ public class MapQueryService {
                 .toList();
     }
 
-    public Page<MapPlaceResponse> getMapPlaces(String district, PlaceCategory category, Integer maxBudget, Pageable pageable) {
-        return mapPlaceRepository.findByFilterPaged(district, category, maxBudget, pageable)
+    public Page<MapPlaceResponse> getMapPlaces(String district, PlaceCategory category, Integer maxBudget, String keyword, Pageable pageable) {
+        String normalizedKeyword = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        return mapPlaceRepository.findByFilterPaged(district, category, maxBudget, normalizedKeyword, pageable)
                 .map(MapPlaceResponse::from);
     }
 
