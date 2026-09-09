@@ -12,8 +12,11 @@ public record CourseItemResponse(
         @Schema(description = "방문 순서 (1부터 시작)", example = "1")
         Short serialNum,
 
-        @Schema(description = "스팟 콘텐츠 ID", example = "2760699")
-        String spotContentId,
+        @Schema(description = "장소 타입 — SPOT(관광공사 스팟), FOOD(착한가게)", example = "SPOT")
+        String placeType,
+
+        @Schema(description = "원본 식별자 — SPOT → sp_spots.content_id, FOOD → fd_food_places.id", example = "2760699")
+        String originalId,
 
         @Schema(description = "스팟명", example = "광안리해수욕장")
         String title,
@@ -34,13 +37,14 @@ public record CourseItemResponse(
         Integer expectedCost,
 
         @Schema(description = "이전 장소로부터 직선 거리 (미터)", example = "850")
-        Short distanceFromPrevM
+        Integer distanceFromPrevM
 
 ) {
     public static CourseItemResponse of(CourseItem item, SpotCandidate spot) {
         return new CourseItemResponse(
                 item.getSerialNum(),
-                item.getSpotContentId(),
+                item.getPlaceRef().type().name(),
+                item.getPlaceRef().originalId(),
                 spot != null ? spot.title() : null,
                 spot != null ? spot.mapX() : null,
                 spot != null ? spot.mapY() : null,

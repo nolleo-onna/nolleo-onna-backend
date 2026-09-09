@@ -3,6 +3,8 @@ package com.nolleo.onna.domain.course.infrastructure.persistence.entity;
 import com.nolleo.onna.common.infrastructure.CreateAudit;
 import com.nolleo.onna.common.infrastructure.UpdateAudit;
 import com.nolleo.onna.domain.course.domain.model.CourseItem;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaceType;
+import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -31,17 +33,22 @@ public class CourseItemEntity {
     @Column(name = "serial_num", nullable = false)
     private Short serialNum;
 
-    /** sp_spots.content_id 참조 */
-    @Column(name = "spot_content_id", length = 20)
-    private String spotContentId;
+    /** 참조 장소의 원본 테이블 구분 — SPOT | FOOD */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "place_type", nullable = false, length = 10)
+    private CoursePlaceType placeType;
+
+    /** 원본 식별자 — SPOT → sp_spots.content_id, FOOD → fd_food_places.id */
+    @Column(name = "original_id", nullable = false, length = 50)
+    private String originalId;
 
     /** 예상 방문 비용 (원) — 음식점만 */
     @Column(name = "expected_cost")
     private Integer expectedCost;
 
-    /** 이전 장소로부터 직선 거리 (미터) */
+    /** 이전 장소로부터 직선 거리 (미터) — 부산 최장 구간이 SMALLINT 상한을 넘어 INTEGER */
     @Column(name = "distance_from_prev_m")
-    private Short distanceFromPrevM;
+    private Integer distanceFromPrevM;
 
     @Embedded
     private CreateAudit createAudit;
@@ -55,7 +62,8 @@ public class CourseItemEntity {
         CourseItemEntity entity = new CourseItemEntity();
         entity.course = courseEntity;
         entity.serialNum = item.getSerialNum();
-        entity.spotContentId = item.getSpotContentId();
+        entity.placeType = item.getPlaceRef().type();
+        entity.originalId = item.getPlaceRef().originalId();
         entity.expectedCost = item.getExpectedCost();
         entity.distanceFromPrevM = item.getDistanceFromPrevM();
         entity.createAudit = CreateAudit.now(courseEntity.getCreateAudit() != null
@@ -70,7 +78,7 @@ public class CourseItemEntity {
                 id,
                 course != null ? course.getId() : null,
                 serialNum,
-                spotContentId,
+                new PlaceRef(placeType, originalId),
                 expectedCost,
                 distanceFromPrevM
         );

@@ -3,6 +3,7 @@ package com.nolleo.onna.domain.course.domain.model;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseType;
 import com.nolleo.onna.domain.course.domain.model.vo.GenerationMode;
+import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.ShareInfo;
 import lombok.Getter;
 
@@ -86,7 +87,7 @@ public class Course {
     public static Course createByAi(Long userId, UUID pairId, CourseIntent intent, String createdBy) {
         validate(userId, intent);
         return new Course(null, userId, pairId, GenerationMode.AI, null,
-                "생성 중", null, intent, null, ShareInfo.of(false, null, 0),
+                "생성 중", null, intent, null, ShareInfo.initial(),
                 new ArrayList<>(), OffsetDateTime.now(), createdBy);
     }
 
@@ -98,7 +99,7 @@ public class Course {
         return new Course(null, userId, pairId, GenerationMode.ALGORITHM, courseType,
                 courseType.buildTitle(intent.startArea()),
                 courseType.buildDescription(intent.companion()),
-                intent, null, ShareInfo.of(false, null, 0),
+                intent, null, ShareInfo.initial(),
                 new ArrayList<>(), OffsetDateTime.now(), createdBy);
     }
 
@@ -123,9 +124,9 @@ public class Course {
     // ── 도메인 로직 ──────────────────────────────────────────────────────────
 
     /** 코스에 방문 스팟 추가 — Aggregate Root를 통해서만 아이템 생성 가능 */
-    public void addItem(String spotContentId, Integer expectedCost, short distanceFromPrevM) {
+    public void addItem(PlaceRef placeRef, Integer expectedCost, Integer distanceFromPrevM) {
         short nextSerial = (short) (items.size() + 1);
-        items.add(new CourseItem(nextSerial, spotContentId, expectedCost, distanceFromPrevM));
+        items.add(new CourseItem(nextSerial, placeRef, expectedCost, distanceFromPrevM));
         this.totalCost = computeTotalCost();
     }
 
@@ -149,10 +150,10 @@ public class Course {
         return costs.stream().mapToInt(Integer::intValue).sum();
     }
 
-    /** 코스 아이템이 참조하는 spotContentId 목록 — 장소 일괄 조회용 */
-    public Set<String> getSpotContentIds() {
+    /** 코스 아이템이 참조하는 장소(PlaceRef) 목록 — 장소 일괄 조회용 */
+    public Set<PlaceRef> getPlaceRefs() {
         return items.stream()
-                .map(CourseItem::getSpotContentId)
+                .map(CourseItem::getPlaceRef)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
     }

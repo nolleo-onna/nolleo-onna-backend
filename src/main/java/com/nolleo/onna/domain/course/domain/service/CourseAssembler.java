@@ -24,7 +24,7 @@ public class CourseAssembler {
     public record Waypoint(String refId, double latitude, double longitude) {
     }
 
-    public record AssembledItem(Waypoint waypoint, short distanceFromPrevM) {
+    public record AssembledItem(Waypoint waypoint, int distanceFromPrevM) {
     }
 
     public static List<AssembledItem> assemble(double startLat, double startLon, List<Waypoint> candidates) {
@@ -43,7 +43,7 @@ public class CourseAssembler {
                     nearest = candidate;
                 }
             }
-            result.add(new AssembledItem(nearest, (short) Math.round(nearestDistance)));
+            result.add(new AssembledItem(nearest, (int) Math.round(nearestDistance)));
             remaining.remove(nearest);
             curLat = nearest.latitude();
             curLon = nearest.longitude();

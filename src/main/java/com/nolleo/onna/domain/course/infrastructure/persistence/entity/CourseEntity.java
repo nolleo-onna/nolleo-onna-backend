@@ -81,6 +81,10 @@ public class CourseEntity {
     @Column(name = "view_count", nullable = false)
     private int viewCount;
 
+    /** 좋아요 수 — generated_course_likes 행 수의 역정규화 */
+    @Column(name = "like_count", nullable = false)
+    private int likeCount;
+
     /**
      * 코스 방문 스팟 목록.
      * cascade=ALL + orphanRemoval: 코스와 아이템의 생명주기 동기화.
@@ -113,6 +117,7 @@ public class CourseEntity {
         entity.isPublic = course.getShareInfo() != null && course.getShareInfo().isPublic();
         entity.shareToken = course.getShareInfo() != null ? course.getShareInfo().shareToken() : null;
         entity.viewCount = course.getShareInfo() != null ? course.getShareInfo().viewCount() : 0;
+        entity.likeCount = course.getShareInfo() != null ? course.getShareInfo().likeCount() : 0;
         entity.createAudit = CreateAudit.now(course.getCreatedBy());
         entity.updateAudit = UpdateAudit.now();
         entity.softDeleteAudit = SoftDeleteAudit.active();
@@ -133,7 +138,7 @@ public class CourseEntity {
                 title, description,
                 CourseIntentJson.fromJson(intent),
                 totalCost,
-                ShareInfo.of(isPublic, shareToken, viewCount),
+                ShareInfo.of(isPublic, shareToken, viewCount, likeCount),
                 domainItems,
                 createAudit != null ? createAudit.getCreatedAt() : null,
                 createAudit != null ? createAudit.getCreatedBy() : null
