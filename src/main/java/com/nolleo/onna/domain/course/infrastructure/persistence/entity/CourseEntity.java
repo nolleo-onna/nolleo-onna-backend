@@ -156,6 +156,17 @@ public class CourseEntity {
         this.updateAudit.touch(updatedBy);
     }
 
+    /**
+     * 공유 상태 전환 결과를 반영한다 — is_public · share_token 만.
+     * 제목·아이템·카운터(view_count · like_count)는 건드리지 않는다. @DynamicUpdate라 바뀐 컬럼만 UPDATE된다.
+     */
+    public void applyShareState(ShareInfo share, String updatedBy) {
+        this.isPublic = share.isPublic();
+        this.shareToken = share.shareToken();
+        if (this.updateAudit == null) this.updateAudit = UpdateAudit.now();
+        this.updateAudit.touch(updatedBy);
+    }
+
     /** 엔티티 → 도메인 재구성 */
     public Course toDomain() {
         List<CourseItem> domainItems = items.stream()

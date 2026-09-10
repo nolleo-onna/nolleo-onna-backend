@@ -21,6 +21,19 @@ public interface CourseRepository {
 
     Optional<Course> findById(Long id);
 
+    /** 공유 토큰으로 공개 코스 단건 조회 — 비공개·삭제된 코스는 제외한다 (존재 여부를 노출하지 않는다) */
+    Optional<Course> findPublicByShareToken(String shareToken);
+
+    /**
+     * 공유 상태(is_public · share_token)만 반영한다. 제목·아이템·카운터는 건드리지 않는다.
+     *
+     * @param actor 변경 주체 — updated_by에 기록
+     */
+    Course saveShareState(Course course, String actor);
+
+    /** 공유 링크 조회수 +1 — 동시 조회에서 유실되지 않도록 원자 UPDATE로 증가시킨다 */
+    void incrementViewCount(Long courseId);
+
     List<Course> findByPairId(UUID pairId);
 
     List<Course> findByUserId(Long userId);

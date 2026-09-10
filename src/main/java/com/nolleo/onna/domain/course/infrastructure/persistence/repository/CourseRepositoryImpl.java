@@ -53,6 +53,29 @@ public class CourseRepositoryImpl implements CourseRepository {
     }
 
     @Override
+    public Optional<Course> findPublicByShareToken(String shareToken) {
+        return jpaRepository.findPublicByShareToken(shareToken).map(CourseEntity::toDomain);
+    }
+
+    /**
+     * 공유 상태만 반영 — 관리 엔티티에 is_public · share_token을 쓰고 flush.
+     * @DynamicUpdate라 바뀐 두 컬럼만 UPDATE되며, 벌크로 증감하는 view_count · like_count는 덮어쓰지 않는다.
+     */
+    @Override
+    public Course saveShareState(Course course, String actor) {
+        CourseEntity entity = jpaRepository.findById(course.getId())
+                .orElseThrow(() -> new BusinessException(CourseErrorCode.COURSE_NOT_FOUND));
+        entity.applyShareState(course.getShareInfo(), actor);
+        jpaRepository.flush();
+        return entity.toDomain();
+    }
+
+    @Override
+    public void incrementViewCount(Long courseId) {
+        jpaRepository.incrementViewCount(courseId);
+    }
+
+    @Override
     public List<Course> findByPairId(UUID pairId) {
         return jpaRepository.findByPairId(pairId).stream()
                 .map(CourseEntity::toDomain)

@@ -27,6 +27,12 @@ public record CourseSummaryResponse(
         @Schema(description = "예상 총 비용 (원) — 음식점 미포함 시 null")
         Integer totalCost,
 
+        @Schema(description = "공개 여부")
+        boolean isPublic,
+
+        @Schema(description = "좋아요 수")
+        int likeCount,
+
         @Schema(description = "방문 순서대로의 스팟 이름 목록", example = "[\"광안리해수욕장\", \"OO카페\"]")
         List<String> spotTitles
 
@@ -45,6 +51,8 @@ public record CourseSummaryResponse(
                 course.getTitle(),
                 course.getDescription(),
                 course.getTotalCost(),
+                course.isPublic(),
+                course.getShareInfo() != null ? course.getShareInfo().likeCount() : 0,
                 spotTitles
         );
     }
