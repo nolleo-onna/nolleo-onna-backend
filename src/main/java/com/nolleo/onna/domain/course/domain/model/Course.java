@@ -1,10 +1,17 @@
 package com.nolleo.onna.domain.course.domain.model;
 
+import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseType;
+import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
 import com.nolleo.onna.domain.course.domain.model.vo.GenerationMode;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.ShareInfo;
+import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
+import com.nolleo.onna.domain.course.domain.service.CourseAssembler.AssembledItem;
+import com.nolleo.onna.domain.course.domain.service.CourseAssembler.Waypoint;
 import lombok.Getter;
 
 import java.time.OffsetDateTime;
@@ -23,14 +30,14 @@ import java.util.stream.Collectors;
 @Getter
 public class Course {
 
-    /** 한 코스에 담을 수 있는 방문 스팟 최대 개수 */
-    public static final int MAX_ITEMS = 15;
-
     /**
-     * 코스 수정 시 전달하는 방문 스팟의 최종 상태.
-     * 순번은 담기지 않는다 — 리스트에서의 위치가 곧 순번이다.
+     * 코스 수정 시 전달하는 방문 장소의 최종 상태 — 방문 순서대로 담긴다.
+     * 순번과 인접 거리는 담지 않는다. 좌표만 넘기면 애그리거트가 계산한다 (replaceItems).
      */
-    public record ItemDraft(PlaceRef placeRef, Integer expectedCost, Integer distanceFromPrevM) {
+    public record VisitStop(PlaceRef placeRef, double latitude, double longitude, Integer expectedCost) {
+        public VisitStop {
+            Objects.requireNonNull(placeRef, "placeRef는 필수입니다.");
+        }
     }
 
     /** 내부 생성 코스 식별자 (PK) */
@@ -143,27 +150,41 @@ public class Course {
     /**
      * 방문 스팟 목록을 최종 상태로 통째 교체한다 (Full State Replacement).
      *
-     * 순번은 전달된 리스트 순서로 1부터 다시 부여하고 totalCost도 재계산하므로,
-     * 추가·삭제·순서 변경이 어떤 조합으로 일어났든 이 호출 하나로 수렴한다.
-     * 순번 부여는 addItem에 있는 규칙(담기는 순서 = 순번)을 그대로 재사용한다.
+     * 순번·인접 거리·totalCost는 모두 애그리거트가 계산한다. 호출자는 방문 순서와 좌표·비용만 넘기므로
+     * "순번은 1부터 연속, 거리는 직전 지점 기준(첫 지점은 시작 지역 중심 기준)" 규칙이 외부 계산에 흔들리지 않는다.
+     * 순서는 재배치하지 않는다 — 사용자가 편집으로 확정한 순서이기 때문이다 (CourseAssembler.measure).
      *
-     * 개수·중복·장소 존재 여부는 응용 계층이 BusinessException으로 먼저 거른다.
-     * 여기서 던지는 예외는 애그리거트 불변식이 깨진 경우로, 정상 요청 흐름에서는 발생하지 않는다.
+     * 검증(개수·중복·시작 지역)을 모두 마친 뒤에 기존 아이템을 비우므로, 실패하면 기존 상태가 그대로 보존된다.
      */
-    public void replaceItems(List<ItemDraft> drafts) {
-        if (drafts == null || drafts.isEmpty()) {
-            throw new IllegalArgumentException("코스에는 최소 1개의 방문 스팟이 필요합니다.");
-        }
-        if (drafts.size() > MAX_ITEMS) {
-            throw new IllegalArgumentException("방문 스팟은 최대 " + MAX_ITEMS + "개입니다.");
-        }
-        long distinctCount = drafts.stream().map(ItemDraft::placeRef).distinct().count();
-        if (distinctCount != drafts.size()) {
-            throw new IllegalArgumentException("같은 장소를 두 번 담을 수 없습니다.");
-        }
+    public void replaceItems(List<VisitStop> stops) {
+        List<PlaceRef> refs = stops == null ? null : stops.stream().map(VisitStop::placeRef).toList();
+        new CoursePlaces(refs); // 개수·중복 불변식 — 규칙은 CoursePlaces 한 곳에만 있다
+        DistrictCenter start = startPoint();
+
+        List<Waypoint> waypoints = stops.stream()
+                .map(stop -> new Waypoint(stop.placeRef().originalId(), stop.latitude(), stop.longitude()))
+                .toList();
+        List<AssembledItem> measured = CourseAssembler.measure(start.getLatitude(), start.getLongitude(), waypoints);
 
         items.clear();
-        drafts.forEach(draft -> addItem(draft.placeRef(), draft.expectedCost(), draft.distanceFromPrevM()));
+        for (int i = 0; i < stops.size(); i++) {
+            VisitStop stop = stops.get(i);
+            addItem(stop.placeRef(), stop.expectedCost(), measured.get(i).distanceFromPrevM());
+        }
+    }
+
+    /** 코스를 생성한 사용자인지 검증 — 조회·수정 공통 규칙 */
+    public void validateOwnedBy(Long requesterId) {
+        if (!Objects.equals(this.userId, requesterId)) {
+            throw new BusinessException(CourseErrorCode.COURSE_ACCESS_DENIED);
+        }
+    }
+
+    /** 코스의 출발 기준점 — 1번 아이템 거리를 재는 시작 지역 중심 좌표 */
+    public DistrictCenter startPoint() {
+        String startArea = intent != null ? intent.startArea() : null;
+        return DistrictCenter.of(startArea)
+                .orElseThrow(() -> new BusinessException(CourseErrorCode.UNKNOWN_START_AREA));
     }
 
     /** AI가 생성한 제목·소개 문구 적용 — 코스 구성 완료 후 호출 */

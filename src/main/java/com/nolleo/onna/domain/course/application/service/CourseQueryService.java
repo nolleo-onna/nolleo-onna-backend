@@ -17,7 +17,6 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -38,9 +37,7 @@ public class CourseQueryService {
         if (courses.isEmpty()) {
             throw new BusinessException(CourseErrorCode.COURSE_NOT_FOUND);
         }
-        if (courses.stream().anyMatch(course -> !Objects.equals(course.getUserId(), userId))) {
-            throw new BusinessException(CourseErrorCode.COURSE_ACCESS_DENIED);
-        }
+        courses.forEach(course -> course.validateOwnedBy(userId));
         return toResponses(courses);
     }
 

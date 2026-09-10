@@ -2,6 +2,7 @@ package com.nolleo.onna.domain.course.presentation.dto.request;
 
 import com.nolleo.onna.domain.course.application.dto.UpdateCourseItemsCommand;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaceType;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
@@ -24,11 +25,9 @@ import java.util.List;
 public record UpdateCourseItemsRequest(
 
         @Schema(description = "방문할 장소 목록. 배열 순서가 곧 방문 순서(1번부터)이며, 같은 장소를 두 번 담을 수 없다.")
-        @NotNull(message = "items는 필수입니다.")
         @NotEmpty(message = "코스에는 최소 1개의 방문 스팟이 필요합니다.")
-        @Size(max = 15, message = "방문 스팟은 최대 15개까지 담을 수 있습니다.")
-        @Valid
-        List<Item> items
+        @Size(max = CoursePlaces.MAX_ITEMS, message = "방문 스팟은 최대 {max}개까지 담을 수 있습니다.")
+        List<@NotNull(message = "items에 null 원소를 담을 수 없습니다.") @Valid Item> items
 ) {
 
     @Schema(description = "방문 장소 — Map API의 placeType / originalId를 그대로 전달")

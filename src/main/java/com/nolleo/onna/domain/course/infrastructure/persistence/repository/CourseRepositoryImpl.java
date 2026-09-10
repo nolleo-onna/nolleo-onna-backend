@@ -29,23 +29,27 @@ public class CourseRepositoryImpl implements CourseRepository {
      * 삭제(flush)와 삽입을 명시적으로 분리한다. (course_id, serial_num)에 UNIQUE가 걸려 있어,
      * 순서만 바꾼 편집("1번을 3번으로")에서 새 행 INSERT가 기존 행 DELETE보다 먼저 나가면
      * 같은 순번이 잠시 두 건이 되어 제약에 걸린다.
+     *
      * 같은 트랜잭션 안이라 findById는 1차 캐시의 관리 엔티티를 그대로 돌려준다.
+     * 관리 엔티티이므로 save(merge)는 필요 없고 flush만으로 반영된다.
      */
     @Override
-    public Course update(Course course, String updatedBy) {
+    public Course saveReplacedItems(Course course, String actor) {
         CourseEntity entity = jpaRepository.findById(course.getId())
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.COURSE_NOT_FOUND));
 
         entity.clearItems();
         jpaRepository.flush();
 
-        entity.applyItems(course.getItems(), course.getTotalCost(), updatedBy);
-        return jpaRepository.saveAndFlush(entity).toDomain();
+        entity.applyItems(course.getItems(), course.getTotalCost(), actor);
+        jpaRepository.flush();
+        return entity.toDomain();
     }
 
+    /** toDomain()이 항상 아이템을 읽으므로 fetch join으로 한 번에 조회한다 (지연 로딩 추가 쿼리 제거) */
     @Override
     public Optional<Course> findById(Long id) {
-        return jpaRepository.findById(id).map(CourseEntity::toDomain);
+        return jpaRepository.findWithItemsById(id).map(CourseEntity::toDomain);
     }
 
     @Override

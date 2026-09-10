@@ -13,6 +13,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -23,9 +24,13 @@ import java.util.UUID;
 /**
  * generated_courses 테이블과 매핑되는 JPA 엔티티.
  * 도메인 객체(Course)와 분리되며, fromDomain/toDomain으로 변환한다.
+ *
+ * {@code @DynamicUpdate}: 변경된 컬럼만 UPDATE한다. like_count·view_count처럼 벌크 쿼리로 증감하는 카운터를
+ * 코스 수정 트랜잭션이 로드 시점 값으로 덮어쓰지 않게 하기 위함이다.
  */
 @Entity
 @Table(name = "generated_courses")
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CourseEntity {
@@ -139,9 +144,10 @@ public class CourseEntity {
     /**
      * 재계산된 아이템 목록과 총비용을 반영한다 (코스 수정의 일괄 반영 지점).
      * clearItems() 이후에 호출하는 것을 전제로 하며, 순번은 도메인이 이미 1부터 재부여한 값이다.
+     * 새로 삽입되는 아이템 행의 created_by는 코스 생성 주체가 아니라 이번 변경 주체(updatedBy)로 기록한다.
      */
     public void applyItems(List<CourseItem> newItems, Integer totalCost, String updatedBy) {
-        newItems.forEach(item -> items.add(CourseItemEntity.fromDomain(item, this)));
+        newItems.forEach(item -> items.add(CourseItemEntity.fromDomain(item, this, updatedBy)));
         this.totalCost = totalCost;
         if (this.updateAudit == null) this.updateAudit = UpdateAudit.now();
         this.updateAudit.touch(updatedBy);

@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.course.domain.exception;
 
 import com.nolleo.onna.common.exception.ErrorCode;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -14,7 +15,7 @@ public enum CourseErrorCode implements ErrorCode {
 
     // 코스 수정 — 방문 스팟 목록 일괄 반영
     COURSE_ITEM_EMPTY(400, "COURSE_ITEM_EMPTY", "코스에는 최소 1개의 방문 스팟이 필요합니다"),
-    COURSE_ITEM_LIMIT_EXCEEDED(400, "COURSE_ITEM_LIMIT_EXCEEDED", "코스의 방문 스팟은 최대 15개까지 담을 수 있습니다"),
+    COURSE_ITEM_LIMIT_EXCEEDED(400, "COURSE_ITEM_LIMIT_EXCEEDED", "코스의 방문 스팟은 최대 " + CoursePlaces.MAX_ITEMS + "개까지 담을 수 있습니다"),
     COURSE_ITEM_DUPLICATED(400, "COURSE_ITEM_DUPLICATED", "같은 장소를 두 번 담을 수 없습니다"),
     COURSE_PLACE_NOT_FOUND(400, "COURSE_PLACE_NOT_FOUND", "코스에 담을 수 없는 장소입니다"),
     COURSE_PLACE_TYPE_NOT_SUPPORTED(400, "COURSE_PLACE_TYPE_NOT_SUPPORTED", "아직 지원하지 않는 장소 유형입니다");

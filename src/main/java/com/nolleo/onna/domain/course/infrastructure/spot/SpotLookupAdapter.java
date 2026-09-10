@@ -45,6 +45,14 @@ public class SpotLookupAdapter implements SpotLookupPort {
     }
 
     @Override
+    public Map<String, SpotCandidate> findActiveByIds(List<String> contentIds) {
+        if (contentIds.isEmpty()) return Map.of();
+        return spotsRepository.findActiveByIds(contentIds).stream()
+                .map(SpotLookupAdapter::toCandidate)
+                .collect(Collectors.toMap(SpotCandidate::contentId, Function.identity()));
+    }
+
+    @Override
     public Map<String, Integer> findFoodPrices(List<String> foodContentIds) {
         if (foodContentIds.isEmpty()) return Map.of();
         Map<String, SpotPriceSummary> prices = spotPriceSummaryRepository.findAllByIds(foodContentIds);

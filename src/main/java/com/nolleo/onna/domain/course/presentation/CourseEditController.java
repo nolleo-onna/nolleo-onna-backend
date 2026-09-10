@@ -36,6 +36,8 @@ public class CourseEditController {
                       저장 후 재조회 없이 이 응답으로 화면을 갱신하면 된다.
                     - courseId는 GET /courses/{pairId} 응답의 id(숫자)이며 pairId(UUID)가 아니다.
                     - 현재는 placeType=SPOT만 허용한다. FOOD는 COURSE_PLACE_TYPE_NOT_SUPPORTED로 거부된다.
+                    - 존재하지 않거나 비활성인 장소, 좌표가 없는 장소가 하나라도 섞이면 COURSE_PLACE_NOT_FOUND로 전체를 거부한다.
+                    - 같은 코스를 거의 동시에 저장해 충돌하면 409 CONCURRENT_MODIFICATION을 받는다. 먼저 반영된 저장은 유지되므로 재조회 후 다시 편집한다.
                     - 검증 실패 시 코스는 변경 전 상태 그대로 유지된다.
                     """
     )
