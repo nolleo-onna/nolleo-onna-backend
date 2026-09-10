@@ -1,8 +1,10 @@
 package com.nolleo.onna.domain.course.infrastructure.persistence.repository;
 
 import com.nolleo.onna.domain.course.infrastructure.persistence.entity.CourseEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -16,6 +18,15 @@ public interface CourseJpaRepository extends JpaRepository<CourseEntity, Long> {
     /** 단건 조회 + 아이템 fetch join — 코스와 아이템을 한 쿼리로 가져온다 */
     @EntityGraph(attributePaths = "items")
     Optional<CourseEntity> findWithItemsById(Long id);
+
+    /**
+     * 단건 조회 + 행 잠금(PESSIMISTIC_WRITE) — 공유 상태 전환처럼 읽고 판단해 쓰는 경로용.
+     * 아이템을 fetch join하지 않는다: PostgreSQL은 outer join의 nullable 쪽에 FOR UPDATE를 허용하지 않는다.
+     * 아이템은 같은 트랜잭션 안에서 지연 로딩된다.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM CourseEntity c WHERE c.id = :id")
+    Optional<CourseEntity> findByIdForUpdate(@Param("id") Long id);
 
     @EntityGraph(attributePaths = "items")
     List<CourseEntity> findByPairId(UUID pairId);

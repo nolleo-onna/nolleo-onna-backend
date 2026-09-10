@@ -20,10 +20,8 @@ public record ShareInfoResponse(
         int likeCount
 
 ) {
+    /** Course가 shareInfo를 항상 보유하므로(생성자 불변식) null 분기가 없다 */
     public static ShareInfoResponse from(ShareInfo share) {
-        if (share == null) {
-            return new ShareInfoResponse(false, null, 0, 0);
-        }
         return new ShareInfoResponse(share.isPublic(), share.shareToken(), share.viewCount(), share.likeCount());
     }
 }

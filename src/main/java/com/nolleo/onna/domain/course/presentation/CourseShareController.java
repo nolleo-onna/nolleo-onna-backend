@@ -54,7 +54,8 @@ public class CourseShareController {
             description = """
                     공유 토큰으로 공개 코스를 조회한다. 로그인 없이 접근할 수 있다.
                     - 조회할 때마다 조회수가 1 증가한다.
-                    - 작성자는 닉네임으로만 노출되며 userId · pairId · 토큰은 응답에 담기지 않는다.
+                    - 작성자는 닉네임으로만 노출되며 코스 id · userId · pairId · 토큰은 응답에 담기지 않는다.
+                      공개 영역의 식별자는 URL의 shareToken 하나다.
                     - 토큰이 없거나, 코스가 비공개이거나, 삭제된 경우 모두 404 COURSE_NOT_FOUND 로 응답한다.
                       세 경우를 구분하지 않아 코스의 존재 여부를 노출하지 않는다.
                     """

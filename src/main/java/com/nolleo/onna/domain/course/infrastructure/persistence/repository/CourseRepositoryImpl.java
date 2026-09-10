@@ -52,6 +52,12 @@ public class CourseRepositoryImpl implements CourseRepository {
         return jpaRepository.findWithItemsById(id).map(CourseEntity::toDomain);
     }
 
+    /** 행 잠금 조회 — fetch join 없이 잠그고, toDomain()에서 아이템을 같은 트랜잭션 안에서 지연 로딩한다 */
+    @Override
+    public Optional<Course> findByIdForUpdate(Long id) {
+        return jpaRepository.findByIdForUpdate(id).map(CourseEntity::toDomain);
+    }
+
     @Override
     public Optional<Course> findPublicByShareToken(String shareToken) {
         return jpaRepository.findPublicByShareToken(shareToken).map(CourseEntity::toDomain);

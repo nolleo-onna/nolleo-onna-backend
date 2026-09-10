@@ -119,10 +119,10 @@ public class CourseEntity {
         entity.description = course.getDescription();
         entity.intent = CourseIntentJson.toJson(course.getIntent());
         entity.totalCost = course.getTotalCost();
-        entity.isPublic = course.getShareInfo() != null && course.getShareInfo().isPublic();
-        entity.shareToken = course.getShareInfo() != null ? course.getShareInfo().shareToken() : null;
-        entity.viewCount = course.getShareInfo() != null ? course.getShareInfo().viewCount() : 0;
-        entity.likeCount = course.getShareInfo() != null ? course.getShareInfo().likeCount() : 0;
+        entity.isPublic = course.getShareInfo().isPublic();
+        entity.shareToken = course.getShareInfo().shareToken();
+        entity.viewCount = course.getShareInfo().viewCount();
+        entity.likeCount = course.getShareInfo().likeCount();
         entity.createAudit = CreateAudit.now(course.getCreatedBy());
         entity.updateAudit = UpdateAudit.now();
         entity.softDeleteAudit = SoftDeleteAudit.active();

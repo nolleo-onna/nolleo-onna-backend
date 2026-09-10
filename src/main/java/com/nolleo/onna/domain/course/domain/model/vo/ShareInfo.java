@@ -1,6 +1,6 @@
 package com.nolleo.onna.domain.course.domain.model.vo;
 
-import java.util.function.Supplier;
+import com.nolleo.onna.domain.course.domain.service.ShareTokenIssuer;
 
 /**
  * 코스 공개 공유 상태 묶음 — 값 객체. 상태 전환은 새 인스턴스를 돌려준다.
@@ -30,11 +30,11 @@ public record ShareInfo(
 
     /**
      * 공개로 전환한다. 이미 공개면 상태 불변(멱등).
-     * 토큰이 이미 있으면 유지하고, 없을 때만 tokenSupplier를 호출해 발급한다 — 불필요한 생성을 피한다.
+     * 토큰이 이미 있으면 유지하고, 없을 때만 issuer에게 발급을 요청한다 — 불필요한 생성을 피한다.
      */
-    public ShareInfo publish(Supplier<String> tokenSupplier) {
+    public ShareInfo publish(ShareTokenIssuer issuer) {
         if (isPublic) return this;
-        String token = shareToken != null ? shareToken : tokenSupplier.get();
+        String token = shareToken != null ? shareToken : issuer.issue();
         if (token == null || token.isBlank()) {
             throw new IllegalArgumentException("공유 토큰이 필요합니다.");
         }

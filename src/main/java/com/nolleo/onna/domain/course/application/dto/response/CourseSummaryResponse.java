@@ -52,7 +52,7 @@ public record CourseSummaryResponse(
                 course.getDescription(),
                 course.getTotalCost(),
                 course.isPublic(),
-                course.getShareInfo() != null ? course.getShareInfo().likeCount() : 0,
+                course.getShareInfo().likeCount(),
                 spotTitles
         );
     }

@@ -25,8 +25,10 @@ import java.util.Map;
  * 코스 공유 — 공개 전환과 공유 링크 열람.
  *
  * 공개 전환 (updateVisibility):
- *   조회 → 소유자 검증(Course.validateOwnedBy) → publish/unpublish → 공유 상태만 저장(saveShareState)
- *   토큰은 최초 공개 때만 발급되고 이후 유지된다 (Course.publish가 Supplier를 필요할 때만 호출).
+ *   행 잠금 조회(findByIdForUpdate) → 소유자 검증(Course.validateOwnedBy) → publish/unpublish → 공유 상태만 저장(saveShareState)
+ *   토큰은 최초 공개 때만 발급되고 이후 유지된다 (Course.publish가 ShareTokenIssuer를 필요할 때만 호출).
+ *   행 잠금으로 같은 코스에 대한 동시 전환을 직렬화한다. 첫 공개가 동시에 들어와도 두 번째 요청은 첫 요청의 커밋을
+ *   기다렸다가 이미 발급된 토큰을 읽으므로, 토큰이 두 번 발급되어 먼저 받은 링크가 404가 되는 일이 없다.
  *
  * 공유 링크 열람 (getShared):
  *   공개 코스 조회 → 조회수 원자 증가(incrementViewCount) → 작성자 닉네임(UserLookupPort) → 스팟 상세 병합
@@ -45,7 +47,7 @@ public class CourseShareService {
     private final UserLookupPort userLookupPort;
 
     public CourseResponse updateVisibility(UpdateCourseVisibilityCommand command) {
-        Course course = courseRepository.findById(command.courseId())
+        Course course = courseRepository.findByIdForUpdate(command.courseId())
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.COURSE_NOT_FOUND));
         course.validateOwnedBy(command.userId());
 
