@@ -114,4 +114,61 @@ class CourseTest {
         course.applyAiContent("광안리 데이트", "소개");
         assertThat(course.getTitle()).isEqualTo("광안리 데이트");
     }
+
+
+    // ── replaceItems (코스 수정 · Full State Replacement) ─────────────────────
+
+    @Test
+    @DisplayName("replaceItems는 전달된 순서대로 1부터 순번을 다시 매기고 totalCost를 재계산한다")
+    void replaceItems_reassignsSerialAndRecomputesCost() {
+        Course course = aiCourse();
+        course.addItem(PlaceRef.spot("A"), 5000, 100);
+        course.addItem(PlaceRef.spot("B"), null, 200);
+        course.addItem(PlaceRef.spot("C"), null, 300);
+
+        // 1번을 3번으로 이동 + 2번 삭제 + X 추가 — 한 번의 교체로 수렴
+        course.replaceItems(List.of(
+                new Course.ItemDraft(PlaceRef.spot("C"), null, 50),
+                new Course.ItemDraft(PlaceRef.spot("X"), 12000, 60),
+                new Course.ItemDraft(PlaceRef.spot("A"), 5000, 70)
+        ));
+
+        List<CourseItem> items = course.getItems();
+        assertThat(items).extracting(CourseItem::getPlaceRef)
+                .containsExactly(PlaceRef.spot("C"), PlaceRef.spot("X"), PlaceRef.spot("A"));
+        assertThat(items).extracting(CourseItem::getSerialNum).containsExactly((short) 1, (short) 2, (short) 3);
+        assertThat(items).extracting(CourseItem::getDistanceFromPrevM).containsExactly(50, 60, 70);
+        assertThat(course.getTotalCost()).isEqualTo(17000);
+    }
+
+    @Test
+    @DisplayName("replaceItems로 음식점을 전부 빼면 totalCost는 0이 아니라 null이 된다")
+    void replaceItems_setsTotalCostNull_whenNoFood() {
+        Course course = aiCourse();
+        course.addItem(PlaceRef.spot("식당"), 9000, 0);
+
+        course.replaceItems(List.of(new Course.ItemDraft(PlaceRef.spot("관광지"), null, 0)));
+
+        assertThat(course.getTotalCost()).isNull();
+    }
+
+    @Test
+    @DisplayName("replaceItems는 빈 목록·상한 초과·중복을 거부하고, 거부 시 기존 아이템을 건드리지 않는다")
+    void replaceItems_rejectsInvalidDrafts_andKeepsItems() {
+        Course course = aiCourse();
+        course.addItem(PlaceRef.spot("A"), null, 0);
+
+        List<Course.ItemDraft> tooMany = java.util.stream.IntStream.rangeClosed(1, Course.MAX_ITEMS + 1)
+                .mapToObj(i -> new Course.ItemDraft(PlaceRef.spot("S" + i), null, 0))
+                .toList();
+        List<Course.ItemDraft> duplicated = List.of(
+                new Course.ItemDraft(PlaceRef.spot("B"), null, 0),
+                new Course.ItemDraft(PlaceRef.spot("B"), null, 0));
+
+        assertThatThrownBy(() -> course.replaceItems(List.of())).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> course.replaceItems(tooMany)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> course.replaceItems(duplicated)).isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(course.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("A"));
+    }
 }
