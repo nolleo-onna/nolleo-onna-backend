@@ -73,4 +73,21 @@ class CourseEntityMappingTest {
 
         assertThat(itemEntity.getDistanceFromPrevM()).isEqualTo(48_000);
     }
+
+    @Test
+    @DisplayName("코스 수정으로 다시 담긴 아이템 행의 created_by는 코스 생성 주체가 아니라 편집한 사용자다")
+    void applyItems_recordsEditorAsItemCreator() {
+        Course course = Course.createByAi(7L, UUID.randomUUID(), INTENT, "AI_CHAT");
+        course.addItem(PlaceRef.spot("2760699"), null, 420);
+        CourseEntity entity = CourseEntity.fromDomain(course);
+        assertThat(entity.getItems().get(0).getCreateAudit().getCreatedBy()).isEqualTo("AI_CHAT");
+
+        entity.clearItems();
+        entity.applyItems(course.getItems(), course.getTotalCost(), "7");
+
+        assertThat(entity.getCreateAudit().getCreatedBy()).isEqualTo("AI_CHAT");
+        assertThat(entity.getItems()).singleElement()
+                .extracting(item -> item.getCreateAudit().getCreatedBy())
+                .isEqualTo("7");
+    }
 }

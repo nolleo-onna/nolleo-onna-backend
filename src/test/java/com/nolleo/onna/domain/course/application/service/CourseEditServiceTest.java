@@ -11,6 +11,7 @@ import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.CourseItem;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaceType;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.GenerationMode;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.ShareInfo;
@@ -91,7 +92,7 @@ class CourseEditServiceTest {
     }
 
     private void stubUpdateReturnsArgument() {
-        given(courseRepository.update(any(Course.class), eq(String.valueOf(OWNER))))
+        given(courseRepository.saveReplacedItems(any(Course.class), eq(String.valueOf(OWNER))))
                 .willAnswer(inv -> inv.getArgument(0));
     }
 
@@ -107,7 +108,7 @@ class CourseEditServiceTest {
     void updateItems_replacesInGivenOrder() {
         // given — 기존 [A,B,C] → 최종 [C, X(음식점), A]: 1번을 3번으로, B 삭제, X 추가
         stubOwnerCourse("A", "B", "C");
-        given(spotLookupPort.findByIds(List.of("C", "X", "A"))).willReturn(byId(A, C, X_FOOD));
+        given(spotLookupPort.findActiveByIds(List.of("C", "X", "A"))).willReturn(byId(A, C, X_FOOD));
         given(spotLookupPort.findFoodPrices(List.of("X"))).willReturn(Map.of("X", 15000));
         stubUpdateReturnsArgument();
 
@@ -116,7 +117,8 @@ class CourseEditServiceTest {
 
         // then — 저장된 애그리거트
         ArgumentCaptor<Course> captor = ArgumentCaptor.forClass(Course.class);
-        verify(courseRepository).update(captor.capture(), eq("1"));
+        verify(courseRepository).saveReplacedItems(captor.capture(), eq("1"));
+        verify(spotLookupPort, never()).findByIds(anyList()); // 쓰기 경로는 활성 스팟만 조회한다
         List<CourseItem> items = captor.getValue().getItems();
 
         assertThat(items).extracting(CourseItem::getPlaceRef)
@@ -142,7 +144,7 @@ class CourseEditServiceTest {
     @DisplayName("같은 리스트를 다시 보내면 결과가 동일하다 (멱등)")
     void updateItems_isIdempotent() {
         stubOwnerCourse("A", "B");
-        given(spotLookupPort.findByIds(List.of("A", "B"))).willReturn(byId(A, B));
+        given(spotLookupPort.findActiveByIds(List.of("A", "B"))).willReturn(byId(A, B));
         given(spotLookupPort.findFoodPrices(List.of())).willReturn(Map.of());
         stubUpdateReturnsArgument();
 
@@ -163,7 +165,7 @@ class CourseEditServiceTest {
         assertThatThrownBy(() -> service.updateItems(spots("A")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_NOT_FOUND);
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 
     @Test
@@ -174,7 +176,7 @@ class CourseEditServiceTest {
         assertThatThrownBy(() -> service.updateItems(command(99L, PlaceRef.spot("A"))))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ACCESS_DENIED);
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 
     @Test
@@ -185,19 +187,19 @@ class CourseEditServiceTest {
         assertThatThrownBy(() -> service.updateItems(command(OWNER)))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ITEM_EMPTY);
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 
     @Test
     @DisplayName("16개를 보내면 COURSE_ITEM_LIMIT_EXCEEDED")
     void updateItems_throws_whenOverLimit() {
         stubOwnerCourse("A");
-        String[] sixteen = IntStream.rangeClosed(1, Course.MAX_ITEMS + 1).mapToObj(i -> "S" + i).toArray(String[]::new);
+        String[] sixteen = IntStream.rangeClosed(1, CoursePlaces.MAX_ITEMS + 1).mapToObj(i -> "S" + i).toArray(String[]::new);
 
         assertThatThrownBy(() -> service.updateItems(spots(sixteen)))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ITEM_LIMIT_EXCEEDED);
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 
     @Test
@@ -208,7 +210,7 @@ class CourseEditServiceTest {
         assertThatThrownBy(() -> service.updateItems(spots("A", "B", "A")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ITEM_DUPLICATED);
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 
     @Test
@@ -220,31 +222,31 @@ class CourseEditServiceTest {
         assertThatThrownBy(() -> service.updateItems(command(OWNER, PlaceRef.spot("A"), food)))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_PLACE_TYPE_NOT_SUPPORTED);
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 
     @Test
-    @DisplayName("존재하지 않는 스팟이 하나라도 있으면 COURSE_PLACE_NOT_FOUND")
+    @DisplayName("존재하지 않거나 비활성인 스팟이 하나라도 있으면 COURSE_PLACE_NOT_FOUND")
     void updateItems_throws_whenSpotMissing() {
         stubOwnerCourse("A");
-        given(spotLookupPort.findByIds(List.of("A", "Z"))).willReturn(byId(A)); // Z 없음
+        given(spotLookupPort.findActiveByIds(List.of("A", "Z"))).willReturn(byId(A)); // Z는 없거나 비활성 — 활성 조회 결과에서 빠진다
 
         assertThatThrownBy(() -> service.updateItems(spots("A", "Z")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_PLACE_NOT_FOUND);
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 
     @Test
     @DisplayName("좌표가 없는 스팟은 거리 계산이 불가하므로 COURSE_PLACE_NOT_FOUND")
     void updateItems_throws_whenSpotHasNoCoordinate() {
         stubOwnerCourse("A");
-        given(spotLookupPort.findByIds(List.of("A", "ghost"))).willReturn(byId(A, NO_COORD));
+        given(spotLookupPort.findActiveByIds(List.of("A", "ghost"))).willReturn(byId(A, NO_COORD));
 
         assertThatThrownBy(() -> service.updateItems(spots("A", "ghost")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_PLACE_NOT_FOUND);
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 
     @Test
@@ -256,7 +258,7 @@ class CourseEditServiceTest {
         assertThatThrownBy(() -> service.updateItems(spots("A")))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.UNKNOWN_START_AREA);
-        verify(spotLookupPort, never()).findByIds(anyList());
-        verify(courseRepository, never()).update(any(), anyString());
+        verify(spotLookupPort, never()).findActiveByIds(anyList());
+        verify(courseRepository, never()).saveReplacedItems(any(), anyString());
     }
 }

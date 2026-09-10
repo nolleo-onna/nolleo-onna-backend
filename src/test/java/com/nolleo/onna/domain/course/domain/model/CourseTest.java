@@ -1,16 +1,25 @@
 package com.nolleo.onna.domain.course.domain.model;
 
+import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseType;
+import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
 import com.nolleo.onna.domain.course.domain.model.vo.GenerationMode;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
+import com.nolleo.onna.domain.course.domain.model.vo.ShareInfo;
+import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class CourseTest {
@@ -115,12 +124,22 @@ class CourseTest {
         assertThat(course.getTitle()).isEqualTo("광안리 데이트");
     }
 
-
     // ── replaceItems (코스 수정 · Full State Replacement) ─────────────────────
 
+    private static final double START_LAT = DistrictCenter.GWANGAN.getLatitude();
+    private static final double START_LON = DistrictCenter.GWANGAN.getLongitude();
+
+    private static Course.VisitStop stop(String id, double lat, double lon, Integer expectedCost) {
+        return new Course.VisitStop(PlaceRef.spot(id), lat, lon, expectedCost);
+    }
+
+    private static int meters(double lat1, double lon1, double lat2, double lon2) {
+        return (int) Math.round(CourseAssembler.distanceMeters(lat1, lon1, lat2, lon2));
+    }
+
     @Test
-    @DisplayName("replaceItems는 전달된 순서대로 1부터 순번을 다시 매기고 totalCost를 재계산한다")
-    void replaceItems_reassignsSerialAndRecomputesCost() {
+    @DisplayName("replaceItems는 전달된 순서대로 1부터 순번을 매기고, 인접 거리와 totalCost를 애그리거트가 계산한다")
+    void replaceItems_reassignsSerial_measuresDistance_recomputesCost() {
         Course course = aiCourse();
         course.addItem(PlaceRef.spot("A"), 5000, 100);
         course.addItem(PlaceRef.spot("B"), null, 200);
@@ -128,17 +147,22 @@ class CourseTest {
 
         // 1번을 3번으로 이동 + 2번 삭제 + X 추가 — 한 번의 교체로 수렴
         course.replaceItems(List.of(
-                new Course.ItemDraft(PlaceRef.spot("C"), null, 50),
-                new Course.ItemDraft(PlaceRef.spot("X"), 12000, 60),
-                new Course.ItemDraft(PlaceRef.spot("A"), 5000, 70)
+                stop("C", 35.1650, 129.1300, null),
+                stop("X", 35.1580, 129.1220, 12000),
+                stop("A", 35.1540, 129.1190, 5000)
         ));
 
         List<CourseItem> items = course.getItems();
         assertThat(items).extracting(CourseItem::getPlaceRef)
                 .containsExactly(PlaceRef.spot("C"), PlaceRef.spot("X"), PlaceRef.spot("A"));
         assertThat(items).extracting(CourseItem::getSerialNum).containsExactly((short) 1, (short) 2, (short) 3);
-        assertThat(items).extracting(CourseItem::getDistanceFromPrevM).containsExactly(50, 60, 70);
         assertThat(course.getTotalCost()).isEqualTo(17000);
+
+        // 첫 지점은 코스 시작 지역(광안리) 중심 기준, 이후는 직전 지점 기준 — 순서를 재배치하지 않는다
+        assertThat(items).extracting(CourseItem::getDistanceFromPrevM).containsExactly(
+                meters(START_LAT, START_LON, 35.1650, 129.1300),
+                meters(35.1650, 129.1300, 35.1580, 129.1220),
+                meters(35.1580, 129.1220, 35.1540, 129.1190));
     }
 
     @Test
@@ -147,28 +171,62 @@ class CourseTest {
         Course course = aiCourse();
         course.addItem(PlaceRef.spot("식당"), 9000, 0);
 
-        course.replaceItems(List.of(new Course.ItemDraft(PlaceRef.spot("관광지"), null, 0)));
+        course.replaceItems(List.of(stop("관광지", 35.1540, 129.1190, null)));
 
         assertThat(course.getTotalCost()).isNull();
     }
 
     @Test
-    @DisplayName("replaceItems는 빈 목록·상한 초과·중복을 거부하고, 거부 시 기존 아이템을 건드리지 않는다")
-    void replaceItems_rejectsInvalidDrafts_andKeepsItems() {
+    @DisplayName("replaceItems는 빈 목록·상한 초과·중복을 도메인 에러코드로 거부하고, 거부 시 기존 아이템을 건드리지 않는다")
+    void replaceItems_rejectsInvalidStops_andKeepsItems() {
         Course course = aiCourse();
         course.addItem(PlaceRef.spot("A"), null, 0);
 
-        List<Course.ItemDraft> tooMany = java.util.stream.IntStream.rangeClosed(1, Course.MAX_ITEMS + 1)
-                .mapToObj(i -> new Course.ItemDraft(PlaceRef.spot("S" + i), null, 0))
+        List<Course.VisitStop> tooMany = IntStream.rangeClosed(1, CoursePlaces.MAX_ITEMS + 1)
+                .mapToObj(i -> stop("S" + i, 35.1540, 129.1190, null))
                 .toList();
-        List<Course.ItemDraft> duplicated = List.of(
-                new Course.ItemDraft(PlaceRef.spot("B"), null, 0),
-                new Course.ItemDraft(PlaceRef.spot("B"), null, 0));
+        List<Course.VisitStop> duplicated = List.of(
+                stop("B", 35.1540, 129.1190, null),
+                stop("B", 35.1540, 129.1190, null));
 
-        assertThatThrownBy(() -> course.replaceItems(List.of())).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> course.replaceItems(tooMany)).isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> course.replaceItems(duplicated)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> course.replaceItems(List.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ITEM_EMPTY);
+        assertThatThrownBy(() -> course.replaceItems(tooMany))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ITEM_LIMIT_EXCEEDED);
+        assertThatThrownBy(() -> course.replaceItems(duplicated))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ITEM_DUPLICATED);
 
         assertThat(course.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("A"));
+    }
+
+    @Test
+    @DisplayName("시작 지역을 해석할 수 없는 코스는 UNKNOWN_START_AREA로 거부하고 기존 아이템을 보존한다")
+    void replaceItems_throws_whenStartAreaUnknown() {
+        CourseIntent unknownArea = new CourseIntent("화성", false, null, null, List.of(), null, false);
+        Course course = Course.restore(1L, 1L, UUID.randomUUID(), GenerationMode.AI, null,
+                "제목", null, unknownArea, null, ShareInfo.initial(),
+                List.of(CourseItem.restore(1L, 1L, (short) 1, PlaceRef.spot("A"), null, 0)),
+                OffsetDateTime.now(), "AI_CHAT");
+
+        assertThatThrownBy(() -> course.replaceItems(List.of(stop("B", 35.1540, 129.1190, null))))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.UNKNOWN_START_AREA);
+        assertThat(course.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("A"));
+    }
+
+    @Test
+    @DisplayName("validateOwnedBy는 코스를 생성한 사용자가 아니면 COURSE_ACCESS_DENIED로 거부한다")
+    void validateOwnedBy_throws_whenNotOwner() {
+        Course course = aiCourse(); // userId = 1
+
+        assertThatCode(() -> course.validateOwnedBy(1L)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> course.validateOwnedBy(99L))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ACCESS_DENIED);
+        assertThatThrownBy(() -> course.validateOwnedBy(null))
+                .isInstanceOf(BusinessException.class);
     }
 }
