@@ -5,6 +5,7 @@ import com.nolleo.onna.common.security.jwt.JwtProvider;
 import com.nolleo.onna.domain.course.application.dto.UpdateCourseCommand;
 import com.nolleo.onna.domain.course.application.dto.response.CourseItemResponse;
 import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
+import com.nolleo.onna.domain.course.application.dto.response.ShareInfoResponse;
 import com.nolleo.onna.domain.course.application.service.CourseEditService;
 import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
@@ -82,7 +83,7 @@ class CourseEditControllerTest {
         CourseItemResponse item = new CourseItemResponse((short) 1, "SPOT", "2760699", "광안리해수욕장",
                 new BigDecimal("129.1187"), new BigDecimal("35.1531"), null, "자연/공원", null, 850);
         return new CourseResponse(10L, UUID.randomUUID(), "AI", TITLE, DESCRIPTION, null,
-                List.of(item), OffsetDateTime.now());
+                List.of(item), ShareInfoResponse.from(null), OffsetDateTime.now());
     }
 
     // ── 정상 ───────────────────────────────────────────────────────────────

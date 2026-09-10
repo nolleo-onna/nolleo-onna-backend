@@ -319,4 +319,65 @@ class CourseTest {
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ITEM_EMPTY);
         assertUnchanged(course);
     }
+
+
+    // ── 공유 (publish / unpublish / markViewed) ────────────────────────────
+
+    @Test
+    @DisplayName("publish는 토큰이 없을 때만 공급자를 호출해 발급하고, 공개 상태로 바꾼다")
+    void publish_issuesTokenOnce() {
+        Course course = aiCourse();
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+
+        course.publish(() -> { calls.incrementAndGet(); return "token-1"; });
+
+        assertThat(course.isPublic()).isTrue();
+        assertThat(course.getShareInfo().shareToken()).isEqualTo("token-1");
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("이미 공개인 코스에 publish를 다시 호출하면 공급자를 부르지 않고 상태도 그대로다 (멱등)")
+    void publish_isIdempotent_whenAlreadyPublic() {
+        Course course = aiCourse();
+        course.publish(() -> "token-1");
+
+        course.publish(() -> { throw new AssertionError("공급자가 호출되면 안 된다"); });
+
+        assertThat(course.isPublic()).isTrue();
+        assertThat(course.getShareInfo().shareToken()).isEqualTo("token-1");
+    }
+
+    @Test
+    @DisplayName("unpublish는 토큰·조회수·좋아요를 보존하고, 재공개 시 새 토큰을 무시해 같은 링크가 살아난다")
+    void unpublish_keepsToken_andRepublishReusesIt() {
+        Course course = aiCourse();
+        course.publish(() -> "token-1");
+        course.markViewed();
+        course.markViewed();
+
+        course.unpublish();
+        assertThat(course.isPublic()).isFalse();
+        assertThat(course.getShareInfo().shareToken()).isEqualTo("token-1");
+        assertThat(course.getShareInfo().viewCount()).isEqualTo(2);
+
+        course.publish(() -> "token-2");
+        assertThat(course.isPublic()).isTrue();
+        assertThat(course.getShareInfo().shareToken()).isEqualTo("token-1");
+        assertThat(course.getShareInfo().viewCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("markViewed는 메모리상 조회수만 1 올리고 공개 여부·토큰은 건드리지 않는다")
+    void markViewed_incrementsViewCountOnly() {
+        Course course = aiCourse();
+        course.publish(() -> "token-1");
+
+        course.markViewed();
+
+        assertThat(course.getShareInfo().viewCount()).isEqualTo(1);
+        assertThat(course.getShareInfo().likeCount()).isZero();
+        assertThat(course.isPublic()).isTrue();
+        assertThat(course.getShareInfo().shareToken()).isEqualTo("token-1");
+    }
 }
