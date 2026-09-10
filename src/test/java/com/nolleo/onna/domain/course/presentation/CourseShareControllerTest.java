@@ -31,6 +31,8 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
@@ -71,6 +73,12 @@ class CourseShareControllerTest {
     private static CourseResponse ownerResponse(boolean isPublic) {
         return new CourseResponse(10L, UUID.randomUUID(), "AI", "광안리 데이트", "소개", null,
                 List.of(sampleItem()), new ShareInfoResponse(isPublic, TOKEN, 3, 1), OffsetDateTime.now());
+    }
+
+    private static SharedCourseResponse sharedResponse() {
+        return new SharedCourseResponse(
+                "광안리 데이트", "소개", 15000, List.of(sampleItem()),
+                "부산러버", "https://img/1.png", 43, 7, OffsetDateTime.now());
     }
 
     // ── PATCH /courses/{courseId}/visibility ──────────────────────────────
@@ -153,9 +161,7 @@ class CourseShareControllerTest {
     @Test
     @DisplayName("GET /api/v1/courses/shared/{token} - 공개 코스를 작성자 닉네임·조회수와 함께 돌려주고 코스 id·userId·pairId·토큰은 담지 않는다")
     void getShared_returns200_withoutInternalIdentifiers() throws Exception {
-        given(courseShareService.getShared(TOKEN)).willReturn(new SharedCourseResponse(
-                "광안리 데이트", "소개", 15000, List.of(sampleItem()),
-                "부산러버", "https://img/1.png", 43, 7, OffsetDateTime.now()));
+        given(courseShareService.getShared(eq(TOKEN), anyString())).willReturn(sharedResponse());
 
         mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN))
                 .andExpect(status().isOk())
@@ -173,10 +179,40 @@ class CourseShareControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/courses/shared/{token} - 로그인 사용자는 회원 id 기반 viewer 키로 조회를 기록한다")
+    void getShared_passesMemberViewerKey_whenLoggedIn() throws Exception {
+        given(courseShareService.getShared(eq(TOKEN), anyString())).willReturn(sharedResponse());
+
+        mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN).with(authentication(authAs(7L))))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<String> viewerKey = ArgumentCaptor.forClass(String.class);
+        verify(courseShareService).getShared(eq(TOKEN), viewerKey.capture());
+        assertThat(viewerKey.getValue()).isEqualTo("u:7");
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/courses/shared/{token} - 비로그인은 IP 해시 기반 viewer 키로 기록하고 원본 IP는 넘기지 않는다")
+    void getShared_passesIpHashViewerKey_whenAnonymous() throws Exception {
+        given(courseShareService.getShared(eq(TOKEN), anyString())).willReturn(sharedResponse());
+
+        mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN)
+                        .with(request -> {
+                            request.setRemoteAddr("203.0.113.9");
+                            return request;
+                        }))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<String> viewerKey = ArgumentCaptor.forClass(String.class);
+        verify(courseShareService).getShared(eq(TOKEN), viewerKey.capture());
+        assertThat(viewerKey.getValue()).startsWith("ip:").hasSize(3 + 16).doesNotContain("203.0.113.9");
+    }
+
+    @Test
     @DisplayName("GET /api/v1/courses/shared/{token} - 없거나 비공개인 토큰은 404 COURSE_NOT_FOUND")
     void getShared_returns404_whenNotPublic() throws Exception {
         willThrow(new BusinessException(CourseErrorCode.COURSE_NOT_FOUND))
-                .given(courseShareService).getShared("unknown");
+                .given(courseShareService).getShared(eq("unknown"), anyString());
 
         mockMvc.perform(get("/api/v1/courses/shared/unknown"))
                 .andExpect(status().isNotFound())

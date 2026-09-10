@@ -76,15 +76,24 @@ class ShareInfoTest {
     }
 
     @Test
-    @DisplayName("viewed는 조회수만 1 올린다")
-    void viewed_incrementsViewCountOnly() {
+    @DisplayName("withPendingViews는 대기 조회수를 더한 새 상태를 돌려주고, 대기분이 0이면 같은 인스턴스다")
+    void withPendingViews_addsPendingToViewCount() {
         ShareInfo share = ShareInfo.of(true, "tok", 10, 3);
 
-        ShareInfo viewed = share.viewed();
+        ShareInfo displayed = share.withPendingViews(5);
 
-        assertThat(viewed.viewCount()).isEqualTo(11);
-        assertThat(viewed.likeCount()).isEqualTo(3);
-        assertThat(viewed.isPublic()).isTrue();
-        assertThat(viewed.shareToken()).isEqualTo("tok");
+        assertThat(displayed.viewCount()).isEqualTo(15);
+        assertThat(displayed.likeCount()).isEqualTo(3);
+        assertThat(displayed.isPublic()).isTrue();
+        assertThat(displayed.shareToken()).isEqualTo("tok");
+        assertThat(share.viewCount()).isEqualTo(10); // 값 객체 — 원본 불변
+        assertThat(share.withPendingViews(0)).isSameAs(share);
+    }
+
+    @Test
+    @DisplayName("withPendingViews는 음수 대기분을 거부한다")
+    void withPendingViews_throws_whenNegative() {
+        assertThatThrownBy(() -> ShareInfo.initial().withPendingViews(-1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }
