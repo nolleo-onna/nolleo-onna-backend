@@ -156,6 +156,20 @@ class PostQueryServiceTest {
     }
 
     @Test
+    @DisplayName("작성자 조회 등 앞 단계가 실패하면 조회를 기록하지 않는다 — 조회 기록은 마지막 단계다")
+    void getPost_doesNotRecordView_whenEarlierStepFails() {
+        // given
+        given(postRepository.findById(1L)).willReturn(Optional.of(post));
+        given(userLookupPort.findById(1L)).willThrow(new IllegalStateException("작성자 조회 실패"));
+
+        // when & then
+        assertThatThrownBy(() -> postQueryService.getPost(1L, null, VIEWER))
+                .isInstanceOf(IllegalStateException.class);
+        verify(viewCountRecorder, never()).record(any(), anyLong(), any(), any());
+        verify(postRepository, never()).incrementViewCount(anyLong());
+    }
+
+    @Test
     @DisplayName("게시글 목록 조회 시 이미지가 있는 게시글은 hasImage: true를 반환한다")
     void getPosts_hasImageTrue_whenImagesExist() {
         // given
