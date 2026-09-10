@@ -25,9 +25,19 @@ spring:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      # 명령·연결 타임아웃 — 미설정 시 Lettuce 기본 60초. 조회수 기록처럼 DB 트랜잭션 안에서 부르는 Redis 호출이
+      # 응답 지연 때 DB 커넥션을 오래 붙잡지 않도록 짧게 둔다. 초과하면 QueryTimeoutException → 각 기능의 대체 경로
+      timeout: ${REDIS_TIMEOUT:200ms}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:500ms}
     web:
       pageable:
         max-page-size: 100
+
+  # @Scheduled 실행 스레드 수 — 기본 1개라 한 작업(조회수 동기화 등)이 지연되면 날씨·혼잡도 갱신까지 밀린다
+  task:
+    scheduling:
+      pool:
+        size: 2
 
   # ── OAuth2 클라이언트 (백엔드 주도 패턴 A) ──────────────────────────────
   # 로그인 시작: GET /oauth2/authorization/{google|kakao|naver}
@@ -93,6 +103,9 @@ app:
     domain: ${COOKIE_DOMAIN}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS}
+  # 조회수 버퍼(Redis) → DB 동기화 주기 (ms). 기본 5분 — Redis 비정상 종료 시 최대 이 주기만큼 조회수가 유실될 수 있다
+  view-count:
+    flush-interval-ms: ${VIEW_COUNT_FLUSH_INTERVAL_MS:300000}
 
 external:
   weather:

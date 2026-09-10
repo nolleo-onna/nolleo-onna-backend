@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -50,6 +51,42 @@ public class CourseRepositoryImpl implements CourseRepository {
     @Override
     public Optional<Course> findById(Long id) {
         return jpaRepository.findWithItemsById(id).map(CourseEntity::toDomain);
+    }
+
+    /** 행 잠금 조회 — fetch join 없이 잠그고, toDomain()에서 아이템을 같은 트랜잭션 안에서 지연 로딩한다 */
+    @Override
+    public Optional<Course> findByIdForUpdate(Long id) {
+        return jpaRepository.findByIdForUpdate(id).map(CourseEntity::toDomain);
+    }
+
+    @Override
+    public Optional<Course> findPublicByShareToken(String shareToken) {
+        return jpaRepository.findPublicByShareToken(shareToken).map(CourseEntity::toDomain);
+    }
+
+    /**
+     * 공유 상태만 반영 — 관리 엔티티에 is_public · share_token을 쓰고 flush.
+     * @DynamicUpdate라 바뀐 두 컬럼만 UPDATE되며, 벌크로 증감하는 view_count · like_count는 덮어쓰지 않는다.
+     */
+    @Override
+    public Course saveShareState(Course course, String actor) {
+        CourseEntity entity = jpaRepository.findById(course.getId())
+                .orElseThrow(() -> new BusinessException(CourseErrorCode.COURSE_NOT_FOUND));
+        entity.applyShareState(course.getShareInfo(), actor);
+        jpaRepository.flush();
+        return entity.toDomain();
+    }
+
+    @Override
+    public void incrementViewCount(Long courseId) {
+        jpaRepository.incrementViewCount(courseId);
+    }
+
+    /** 코스별로 원자 가산 UPDATE를 실행한다 — 호출자(CourseViewCountSink)의 트랜잭션 안에서 함께 커밋된다 */
+    @Override
+    public void addViewCounts(Map<Long, Long> deltaByCourseId) {
+        deltaByCourseId.forEach((courseId, delta) ->
+                jpaRepository.addViewCount(courseId, Math.toIntExact(delta)));
     }
 
     @Override

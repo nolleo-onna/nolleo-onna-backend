@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.post.application.service;
 
 import com.nolleo.onna.common.application.port.UserLookupPort;
+import com.nolleo.onna.common.application.service.ViewCountRecorder;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
 import com.nolleo.onna.domain.post.application.dto.PostPopularResult;
@@ -35,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -45,8 +47,11 @@ class PostQueryServiceTest {
     @Mock PostRepository postRepository;
     @Mock PostLikeRepository postLikeRepository;
     @Mock UserLookupPort userLookupPort;
+    @Mock ViewCountRecorder viewCountRecorder;
 
     @InjectMocks PostQueryService postQueryService;
+
+    private static final String VIEWER = "u:1";
 
     private Post post;
     private UserLookupPort.UserProfile mockProfile;
@@ -66,22 +71,44 @@ class PostQueryServiceTest {
     }
 
     @Test
-    @DisplayName("게시글 단건 조회 시 조회수가 증가하고 상세 정보를 반환한다")
-    void getPost_success_andIncrementsViewCount() {
+    @DisplayName("게시글 단건 조회 시 조회를 버퍼에 기록하고, 표시 조회수에 DB 미반영분(이번 조회 포함)을 더해 상세 정보를 반환한다")
+    void getPost_success_andRecordsView() {
         // given
         given(postRepository.findById(1L)).willReturn(Optional.of(post));
         given(postLikeRepository.existsByPostIdAndUserId(1L, 1L)).willReturn(false);
         given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
+        given(viewCountRecorder.record(eq(PostViewCountSink.TARGET_TYPE), eq(1L), eq(VIEWER), any())).willReturn(3L);
 
         // when
-        PostDetailResult result = postQueryService.getPost(1L, 1L);
+        PostDetailResult result = postQueryService.getPost(1L, 1L, VIEWER);
 
         // then
         assertThat(result.post().getId()).isEqualTo(1L);
         assertThat(result.post().getTitle()).isEqualTo("제목");
         assertThat(result.isLiked()).isFalse();
         assertThat(result.post().getImageUrls()).hasSize(1);
-        verify(postRepository, times(1)).incrementViewCount(1L);
+        assertThat(result.post().getViewCount()).isEqualTo(13); // DB 10 + 대기 3
+        verify(postRepository, never()).incrementViewCount(anyLong()); // 평소에는 DB에 바로 쓰지 않는다
+    }
+
+    @Test
+    @DisplayName("조회 기록의 DB 대체 경로는 이 게시글의 조회수를 DB에서 바로 1 올린다")
+    void getPost_fallbackIncrementsThisPost() {
+        // given
+        given(postRepository.findById(1L)).willReturn(Optional.of(post));
+        given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
+        given(viewCountRecorder.record(eq(PostViewCountSink.TARGET_TYPE), eq(1L), eq(VIEWER), any()))
+                .willAnswer(invocation -> {
+                    invocation.<Runnable>getArgument(3).run();
+                    return 1L;
+                });
+
+        // when
+        PostDetailResult result = postQueryService.getPost(1L, null, VIEWER);
+
+        // then
+        verify(postRepository).incrementViewCount(1L);
+        assertThat(result.post().getViewCount()).isEqualTo(11);
     }
 
     @Test
@@ -93,7 +120,7 @@ class PostQueryServiceTest {
         given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        PostDetailResult result = postQueryService.getPost(1L, 1L);
+        PostDetailResult result = postQueryService.getPost(1L, 1L, VIEWER);
 
         // then
         assertThat(result.isLiked()).isTrue();
@@ -107,7 +134,7 @@ class PostQueryServiceTest {
         given(userLookupPort.findById(1L)).willReturn(Optional.of(mockProfile));
 
         // when
-        PostDetailResult result = postQueryService.getPost(1L, null);
+        PostDetailResult result = postQueryService.getPost(1L, null, VIEWER);
 
         // then
         assertThat(result.isLiked()).isFalse();
@@ -115,16 +142,31 @@ class PostQueryServiceTest {
     }
 
     @Test
-    @DisplayName("존재하지 않는 게시글 조회 시 POST_NOT_FOUND 예외를 던진다")
+    @DisplayName("존재하지 않는 게시글 조회 시 POST_NOT_FOUND 예외를 던지고 조회도 기록하지 않는다")
     void getPost_throwsException_whenPostNotFound() {
         // given
         given(postRepository.findById(999L)).willReturn(Optional.empty());
 
         // when & then
-        assertThatThrownBy(() -> postQueryService.getPost(999L, 1L))
+        assertThatThrownBy(() -> postQueryService.getPost(999L, 1L, VIEWER))
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(PostErrorCode.POST_NOT_FOUND));
+        verify(viewCountRecorder, never()).record(any(), anyLong(), any(), any());
+    }
+
+    @Test
+    @DisplayName("작성자 조회 등 앞 단계가 실패하면 조회를 기록하지 않는다 — 조회 기록은 마지막 단계다")
+    void getPost_doesNotRecordView_whenEarlierStepFails() {
+        // given
+        given(postRepository.findById(1L)).willReturn(Optional.of(post));
+        given(userLookupPort.findById(1L)).willThrow(new IllegalStateException("작성자 조회 실패"));
+
+        // when & then
+        assertThatThrownBy(() -> postQueryService.getPost(1L, null, VIEWER))
+                .isInstanceOf(IllegalStateException.class);
+        verify(viewCountRecorder, never()).record(any(), anyLong(), any(), any());
+        verify(postRepository, never()).incrementViewCount(anyLong());
     }
 
     @Test

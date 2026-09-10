@@ -119,10 +119,10 @@ public class CourseEntity {
         entity.description = course.getDescription();
         entity.intent = CourseIntentJson.toJson(course.getIntent());
         entity.totalCost = course.getTotalCost();
-        entity.isPublic = course.getShareInfo() != null && course.getShareInfo().isPublic();
-        entity.shareToken = course.getShareInfo() != null ? course.getShareInfo().shareToken() : null;
-        entity.viewCount = course.getShareInfo() != null ? course.getShareInfo().viewCount() : 0;
-        entity.likeCount = course.getShareInfo() != null ? course.getShareInfo().likeCount() : 0;
+        entity.isPublic = course.getShareInfo().isPublic();
+        entity.shareToken = course.getShareInfo().shareToken();
+        entity.viewCount = course.getShareInfo().viewCount();
+        entity.likeCount = course.getShareInfo().likeCount();
         entity.createAudit = CreateAudit.now(course.getCreatedBy());
         entity.updateAudit = UpdateAudit.now();
         entity.softDeleteAudit = SoftDeleteAudit.active();
@@ -152,6 +152,17 @@ public class CourseEntity {
         this.description = edited.getDescription();
         edited.getItems().forEach(item -> items.add(CourseItemEntity.fromDomain(item, this, updatedBy)));
         this.totalCost = edited.getTotalCost();
+        if (this.updateAudit == null) this.updateAudit = UpdateAudit.now();
+        this.updateAudit.touch(updatedBy);
+    }
+
+    /**
+     * 공유 상태 전환 결과를 반영한다 — is_public · share_token 만.
+     * 제목·아이템·카운터(view_count · like_count)는 건드리지 않는다. @DynamicUpdate라 바뀐 컬럼만 UPDATE된다.
+     */
+    public void applyShareState(ShareInfo share, String updatedBy) {
+        this.isPublic = share.isPublic();
+        this.shareToken = share.shareToken();
         if (this.updateAudit == null) this.updateAudit = UpdateAudit.now();
         this.updateAudit.touch(updatedBy);
     }

@@ -120,7 +120,7 @@ class PostControllerTest {
     @DisplayName("GET /api/v1/posts/{postId} - 게시글 단건 조회 시 200을 반환한다")
     void getPost_returns200() throws Exception {
         // given
-        given(postQueryService.getPost(anyLong(), any())).willReturn(sampleDetailResult());
+        given(postQueryService.getPost(anyLong(), any(), anyString())).willReturn(sampleDetailResult());
 
         // when & then
         mockMvc.perform(get("/api/v1/posts/1"))
@@ -133,7 +133,7 @@ class PostControllerTest {
     @DisplayName("GET /api/v1/posts/{postId} - 존재하지 않는 게시글 조회 시 404를 반환한다")
     void getPost_returns404_whenPostNotFound() throws Exception {
         // given
-        given(postQueryService.getPost(anyLong(), any()))
+        given(postQueryService.getPost(anyLong(), any(), anyString()))
                 .willThrow(new BusinessException(PostErrorCode.POST_NOT_FOUND));
 
         // when & then
