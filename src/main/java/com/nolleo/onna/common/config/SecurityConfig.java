@@ -70,6 +70,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts", "/api/v1/posts/**").permitAll()
                         // 댓글 조회 - 비로그인 허용
                         .requestMatchers(HttpMethod.GET, "/api/v1/posts/*/comments").permitAll()
+                        // 코스 공유 링크 조회 - 비로그인 허용 (공개 전환·소유자 조회는 인증 필요)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/courses/shared/**").permitAll()
                         // 재발급은 access 없이 refresh 쿠키로 동작 → permitAll
                         .requestMatchers("/api/v1/auth/refresh").permitAll()
                         // me/logout 등 나머지는 인증 필요

@@ -12,6 +12,7 @@ import com.nolleo.onna.domain.course.domain.model.vo.ShareInfo;
 import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
 import com.nolleo.onna.domain.course.domain.service.CourseAssembler.AssembledItem;
 import com.nolleo.onna.domain.course.domain.service.CourseAssembler.Waypoint;
+import com.nolleo.onna.domain.course.domain.service.ShareTokenIssuer;
 import lombok.Getter;
 
 import java.time.OffsetDateTime;
@@ -98,7 +99,7 @@ public class Course {
         this.description = description;
         this.intent = intent;
         this.totalCost = totalCost;
-        this.shareInfo = shareInfo;
+        this.shareInfo = Objects.requireNonNull(shareInfo, "shareInfo는 필수입니다 — 공유 상태는 항상 존재한다.");
         this.items = items;
         this.createdAt = createdAt;
         this.createdBy = createdBy;
@@ -192,6 +193,34 @@ public class Course {
             VisitStop stop = stops.get(i);
             addItem(stop.placeRef(), stop.expectedCost(), measured.get(i).distanceFromPrevM());
         }
+    }
+
+    // ── 공유 ─────────────────────────────────────────────────────────────────
+
+    /**
+     * 코스를 공개로 전환한다. 소유자 검증은 호출자가 validateOwnedBy로 먼저 수행한다.
+     * 토큰은 최초 공개 때만 발급되고 이후엔 유지된다 — 비공개 후 재공개해도 링크가 바뀌지 않는다.
+     * 이미 공개면 아무것도 하지 않는다(멱등).
+     */
+    public void publish(ShareTokenIssuer issuer) {
+        this.shareInfo = shareInfo.publish(issuer);
+    }
+
+    /** 코스를 비공개로 전환한다. 토큰·조회수·좋아요 수는 보존된다. 이미 비공개면 아무것도 하지 않는다. */
+    public void unpublish() {
+        this.shareInfo = shareInfo.unpublish();
+    }
+
+    public boolean isPublic() {
+        return shareInfo.isPublic();
+    }
+
+    /**
+     * 공유 링크로 열람됐음을 반영한다 — 메모리상 조회수만 +1.
+     * DB의 view_count는 동시 조회에서 유실되지 않도록 CourseRepository.incrementViewCount(원자 UPDATE)로 따로 올린다.
+     */
+    public void markViewed() {
+        this.shareInfo = shareInfo.viewed();
     }
 
     /** 코스를 생성한 사용자인지 검증 — 조회·수정 공통 규칙 */
