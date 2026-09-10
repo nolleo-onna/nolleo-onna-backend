@@ -23,6 +23,16 @@ import java.util.stream.Collectors;
 @Getter
 public class Course {
 
+    /** 한 코스에 담을 수 있는 방문 스팟 최대 개수 */
+    public static final int MAX_ITEMS = 15;
+
+    /**
+     * 코스 수정 시 전달하는 방문 스팟의 최종 상태.
+     * 순번은 담기지 않는다 — 리스트에서의 위치가 곧 순번이다.
+     */
+    public record ItemDraft(PlaceRef placeRef, Integer expectedCost, Integer distanceFromPrevM) {
+    }
+
     /** 내부 생성 코스 식별자 (PK) */
     private final Long id;
 
@@ -128,6 +138,32 @@ public class Course {
         short nextSerial = (short) (items.size() + 1);
         items.add(new CourseItem(nextSerial, placeRef, expectedCost, distanceFromPrevM));
         this.totalCost = computeTotalCost();
+    }
+
+    /**
+     * 방문 스팟 목록을 최종 상태로 통째 교체한다 (Full State Replacement).
+     *
+     * 순번은 전달된 리스트 순서로 1부터 다시 부여하고 totalCost도 재계산하므로,
+     * 추가·삭제·순서 변경이 어떤 조합으로 일어났든 이 호출 하나로 수렴한다.
+     * 순번 부여는 addItem에 있는 규칙(담기는 순서 = 순번)을 그대로 재사용한다.
+     *
+     * 개수·중복·장소 존재 여부는 응용 계층이 BusinessException으로 먼저 거른다.
+     * 여기서 던지는 예외는 애그리거트 불변식이 깨진 경우로, 정상 요청 흐름에서는 발생하지 않는다.
+     */
+    public void replaceItems(List<ItemDraft> drafts) {
+        if (drafts == null || drafts.isEmpty()) {
+            throw new IllegalArgumentException("코스에는 최소 1개의 방문 스팟이 필요합니다.");
+        }
+        if (drafts.size() > MAX_ITEMS) {
+            throw new IllegalArgumentException("방문 스팟은 최대 " + MAX_ITEMS + "개입니다.");
+        }
+        long distinctCount = drafts.stream().map(ItemDraft::placeRef).distinct().count();
+        if (distinctCount != drafts.size()) {
+            throw new IllegalArgumentException("같은 장소를 두 번 담을 수 없습니다.");
+        }
+
+        items.clear();
+        drafts.forEach(draft -> addItem(draft.placeRef(), draft.expectedCost(), draft.distanceFromPrevM()));
     }
 
     /** AI가 생성한 제목·소개 문구 적용 — 코스 구성 완료 후 호출 */

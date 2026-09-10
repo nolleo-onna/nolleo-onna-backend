@@ -127,6 +127,26 @@ public class CourseEntity {
         return entity;
     }
 
+    /**
+     * 자식 아이템을 전부 컬렉션에서 떼어낸다.
+     * orphanRemoval=true라 flush 시 기존 행이 DELETE된다 — 새 아이템을 넣기 전에
+     * 호출자가 flush를 한 번 끼워 넣어야 (course_id, serial_num) UNIQUE와 충돌하지 않는다.
+     */
+    public void clearItems() {
+        items.clear();
+    }
+
+    /**
+     * 재계산된 아이템 목록과 총비용을 반영한다 (코스 수정의 일괄 반영 지점).
+     * clearItems() 이후에 호출하는 것을 전제로 하며, 순번은 도메인이 이미 1부터 재부여한 값이다.
+     */
+    public void applyItems(List<CourseItem> newItems, Integer totalCost, String updatedBy) {
+        newItems.forEach(item -> items.add(CourseItemEntity.fromDomain(item, this)));
+        this.totalCost = totalCost;
+        if (this.updateAudit == null) this.updateAudit = UpdateAudit.now();
+        this.updateAudit.touch(updatedBy);
+    }
+
     /** 엔티티 → 도메인 재구성 */
     public Course toDomain() {
         List<CourseItem> domainItems = items.stream()
