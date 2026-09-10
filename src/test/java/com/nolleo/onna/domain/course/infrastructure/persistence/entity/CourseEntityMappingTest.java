@@ -75,19 +75,26 @@ class CourseEntityMappingTest {
     }
 
     @Test
-    @DisplayName("코스 수정으로 다시 담긴 아이템 행의 created_by는 코스 생성 주체가 아니라 편집한 사용자다")
-    void applyItems_recordsEditorAsItemCreator() {
+    @DisplayName("applyEdit는 편집된 제목·소개·아이템을 반영하고, 다시 담긴 아이템 행의 created_by는 편집한 사용자다")
+    void applyEdit_appliesContent_andRecordsEditorAsItemCreator() {
         Course course = Course.createByAi(7L, UUID.randomUUID(), INTENT, "AI_CHAT");
+        course.applyAiContent("AI 제목", "AI 소개");
         course.addItem(PlaceRef.spot("2760699"), null, 420);
         CourseEntity entity = CourseEntity.fromDomain(course);
         assertThat(entity.getItems().get(0).getCreateAudit().getCreatedBy()).isEqualTo("AI_CHAT");
 
+        course.edit("내가 고친 제목", null, List.of(new Course.VisitStop(PlaceRef.spot("1924688"), 35.1540, 129.1190, null)));
         entity.clearItems();
-        entity.applyItems(course.getItems(), course.getTotalCost(), "7");
+        entity.applyEdit(course, "7");
 
+        assertThat(entity.getTitle()).isEqualTo("내가 고친 제목");
+        assertThat(entity.getDescription()).isNull();
         assertThat(entity.getCreateAudit().getCreatedBy()).isEqualTo("AI_CHAT");
+        assertThat(entity.isPublic()).isFalse(); // 공유 상태는 편집 대상이 아니다
         assertThat(entity.getItems()).singleElement()
-                .extracting(item -> item.getCreateAudit().getCreatedBy())
-                .isEqualTo("7");
+                .satisfies(item -> {
+                    assertThat(item.getOriginalId()).isEqualTo("1924688");
+                    assertThat(item.getCreateAudit().getCreatedBy()).isEqualTo("7");
+                });
     }
 }

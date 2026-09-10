@@ -229,4 +229,94 @@ class CourseTest {
         assertThatThrownBy(() -> course.validateOwnedBy(null))
                 .isInstanceOf(BusinessException.class);
     }
+
+    // ── edit (제목 · 소개 · 방문 스팟 일괄 편집) ──────────────────────────────
+
+    /** 제목·소개·스팟 A가 담긴 편집 전 코스 */
+    private static Course courseBeforeEdit() {
+        Course course = aiCourse();
+        course.applyAiContent("원래 제목", "원래 소개");
+        course.addItem(PlaceRef.spot("A"), null, 0);
+        return course;
+    }
+
+    private static void assertUnchanged(Course course) {
+        assertThat(course.getTitle()).isEqualTo("원래 제목");
+        assertThat(course.getDescription()).isEqualTo("원래 소개");
+        assertThat(course.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("A"));
+    }
+
+    @Test
+    @DisplayName("edit는 제목·소개의 앞뒤 공백을 제거해 반영하고 방문 스팟도 함께 교체한다")
+    void edit_appliesStrippedContent_andReplacesItems() {
+        Course course = courseBeforeEdit();
+
+        course.edit("  광안리 바다 산책  ", "  바다를 따라 걷는 코스  ", List.of(stop("B", 35.1600, 129.1250, null)));
+
+        assertThat(course.getTitle()).isEqualTo("광안리 바다 산책");
+        assertThat(course.getDescription()).isEqualTo("바다를 따라 걷는 코스");
+        assertThat(course.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("B"));
+    }
+
+    @Test
+    @DisplayName("edit에서 소개를 null이나 공백으로 보내면 소개가 지워진다")
+    void edit_clearsDescription_whenNullOrBlank() {
+        Course course = courseBeforeEdit();
+        course.edit("제목", null, List.of(stop("A", 35.1540, 129.1190, null)));
+        assertThat(course.getDescription()).isNull();
+
+        Course other = courseBeforeEdit();
+        other.edit("제목", "   ", List.of(stop("A", 35.1540, 129.1190, null)));
+        assertThat(other.getDescription()).isNull();
+    }
+
+    @Test
+    @DisplayName("edit는 제목 최대 길이와 소개 최대 길이까지는 허용한다")
+    void edit_acceptsMaxLengths() {
+        Course course = courseBeforeEdit();
+        String maxTitle = "가".repeat(Course.MAX_TITLE_LENGTH);
+        String maxDescription = "나".repeat(Course.MAX_DESCRIPTION_LENGTH);
+
+        course.edit(maxTitle, maxDescription, List.of(stop("A", 35.1540, 129.1190, null)));
+
+        assertThat(course.getTitle()).isEqualTo(maxTitle);
+        assertThat(course.getDescription()).isEqualTo(maxDescription);
+    }
+
+    @Test
+    @DisplayName("edit는 제목이 null·공백·최대 길이 초과면 COURSE_TITLE_INVALID로 거부하고 아무것도 바꾸지 않는다")
+    void edit_rejectsInvalidTitle_andKeepsState() {
+        Course course = courseBeforeEdit();
+        List<Course.VisitStop> stops = List.of(stop("B", 35.1600, 129.1250, null));
+
+        for (String invalidTitle : new String[]{null, "   ", "가".repeat(Course.MAX_TITLE_LENGTH + 1)}) {
+            assertThatThrownBy(() -> course.edit(invalidTitle, "새 소개", stops))
+                    .isInstanceOf(BusinessException.class)
+                    .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_TITLE_INVALID);
+        }
+        assertUnchanged(course);
+    }
+
+    @Test
+    @DisplayName("edit는 소개가 최대 길이를 넘으면 COURSE_DESCRIPTION_TOO_LONG으로 거부하고 아무것도 바꾸지 않는다")
+    void edit_rejectsTooLongDescription_andKeepsState() {
+        Course course = courseBeforeEdit();
+
+        assertThatThrownBy(() -> course.edit("새 제목", "나".repeat(Course.MAX_DESCRIPTION_LENGTH + 1),
+                List.of(stop("B", 35.1600, 129.1250, null))))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_DESCRIPTION_TOO_LONG);
+        assertUnchanged(course);
+    }
+
+    @Test
+    @DisplayName("edit는 스팟 목록이 잘못되면 제목·소개도 반영하지 않는다 (원자적 편집)")
+    void edit_keepsContent_whenItemsInvalid() {
+        Course course = courseBeforeEdit();
+
+        assertThatThrownBy(() -> course.edit("새 제목", "새 소개", List.of()))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_ITEM_EMPTY);
+        assertUnchanged(course);
+    }
 }
