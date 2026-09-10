@@ -380,4 +380,12 @@ class CourseTest {
         assertThat(course.isPublic()).isTrue();
         assertThat(course.getShareInfo().shareToken()).isEqualTo("token-1");
     }
+
+    @Test
+    @DisplayName("shareInfo 없이는 코스를 복원할 수 없다 — 공유 상태는 항상 존재한다 (불변식)")
+    void restore_throws_whenShareInfoNull() {
+        assertThatThrownBy(() -> Course.restore(1L, 1L, UUID.randomUUID(), GenerationMode.AI, null,
+                "제목", null, INTENT, null, null, List.of(), OffsetDateTime.now(), "AI_CHAT"))
+                .isInstanceOf(NullPointerException.class);
+    }
 }

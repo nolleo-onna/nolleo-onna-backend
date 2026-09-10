@@ -151,16 +151,16 @@ class CourseShareControllerTest {
     // ── GET /courses/shared/{shareToken} ─────────────────────────────────
 
     @Test
-    @DisplayName("GET /api/v1/courses/shared/{token} - 공개 코스를 작성자 닉네임·조회수와 함께 돌려주고 userId·pairId·토큰은 담지 않는다")
-    void getShared_returns200_withoutOwnerIdentity() throws Exception {
+    @DisplayName("GET /api/v1/courses/shared/{token} - 공개 코스를 작성자 닉네임·조회수와 함께 돌려주고 코스 id·userId·pairId·토큰은 담지 않는다")
+    void getShared_returns200_withoutInternalIdentifiers() throws Exception {
         given(courseShareService.getShared(TOKEN)).willReturn(new SharedCourseResponse(
-                10L, "광안리 데이트", "소개", 15000, List.of(sampleItem()),
+                "광안리 데이트", "소개", 15000, List.of(sampleItem()),
                 "부산러버", "https://img/1.png", 43, 7, OffsetDateTime.now()));
 
         mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("공유 코스 조회 성공"))
-                .andExpect(jsonPath("$.data.id").value(10))
+                .andExpect(jsonPath("$.data.id").doesNotExist()) // 공개 영역 식별자는 URL의 토큰 하나
                 .andExpect(jsonPath("$.data.title").value("광안리 데이트"))
                 .andExpect(jsonPath("$.data.authorNickname").value("부산러버"))
                 .andExpect(jsonPath("$.data.viewCount").value(43))

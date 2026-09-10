@@ -68,8 +68,9 @@ class CourseShareServiceTest {
                 "제목", "소개", INTENT, null, share, items, OffsetDateTime.now(), "AI_CHAT");
     }
 
-    private void stubOwnerCourse(ShareInfo share) {
-        given(courseRepository.findById(COURSE_ID)).willReturn(Optional.of(savedCourse(OWNER, share)));
+    /** 공개 전환 경로는 행 잠금 조회(findByIdForUpdate)로 코스를 읽는다 */
+    private void stubOwnerCourseForUpdate(ShareInfo share) {
+        given(courseRepository.findByIdForUpdate(COURSE_ID)).willReturn(Optional.of(savedCourse(OWNER, share)));
     }
 
     private void stubSaveShareStateReturnsArgument() {
@@ -84,9 +85,9 @@ class CourseShareServiceTest {
     // ── 공개 전환 ───────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("소유자가 공개 전환하면 토큰이 발급되고 공유 상태만 저장되며, 응답 share에 토큰이 담긴다")
+    @DisplayName("소유자가 공개 전환하면 잠금 조회 후 토큰이 발급되고 공유 상태만 저장되며, 응답 share에 토큰이 담긴다")
     void updateVisibility_publishes_andIssuesToken() {
-        stubOwnerCourse(ShareInfo.initial());
+        stubOwnerCourseForUpdate(ShareInfo.initial());
         stubSaveShareStateReturnsArgument();
         stubSpots();
 
@@ -103,13 +104,27 @@ class CourseShareServiceTest {
         assertThat(response.share().isPublic()).isTrue();
         assertThat(response.share().shareToken()).isEqualTo(saved.getShareInfo().shareToken());
         assertThat(response.items()).extracting(CourseItemResponse::title).containsExactly("A명");
+        verify(courseRepository, never()).findById(anyLong());            // 잠금 없는 조회로 읽지 않는다
         verify(courseRepository, never()).saveEdited(any(), anyString()); // 편집 경로를 타지 않는다
+    }
+
+    @Test
+    @DisplayName("이미 공개된 코스(동시 요청의 두 번째 — 잠금 해제 후 읽은 상태)는 새 토큰을 발급하지 않고 기존 토큰을 응답한다")
+    void updateVisibility_alreadyPublic_keepsExistingToken() {
+        stubOwnerCourseForUpdate(ShareInfo.of(true, TOKEN, 0, 0));
+        stubSaveShareStateReturnsArgument();
+        stubSpots();
+
+        CourseResponse response = service.updateVisibility(new UpdateCourseVisibilityCommand(COURSE_ID, OWNER, true));
+
+        assertThat(response.share().isPublic()).isTrue();
+        assertThat(response.share().shareToken()).isEqualTo(TOKEN);
     }
 
     @Test
     @DisplayName("비공개 전환은 토큰·조회수·좋아요를 보존한다")
     void updateVisibility_unpublishes_andKeepsTokenAndCounters() {
-        stubOwnerCourse(ShareInfo.of(true, TOKEN, 42, 7));
+        stubOwnerCourseForUpdate(ShareInfo.of(true, TOKEN, 42, 7));
         stubSaveShareStateReturnsArgument();
         stubSpots();
 
@@ -124,7 +139,7 @@ class CourseShareServiceTest {
     @Test
     @DisplayName("비공개였다가 다시 공개하면 기존 토큰이 그대로 쓰여 같은 링크가 살아난다")
     void updateVisibility_republish_reusesToken() {
-        stubOwnerCourse(ShareInfo.of(false, TOKEN, 42, 7));
+        stubOwnerCourseForUpdate(ShareInfo.of(false, TOKEN, 42, 7));
         stubSaveShareStateReturnsArgument();
         stubSpots();
 
@@ -137,7 +152,7 @@ class CourseShareServiceTest {
     @Test
     @DisplayName("타인이 전환을 시도하면 COURSE_ACCESS_DENIED — 저장하지 않는다 (IDOR)")
     void updateVisibility_throws_whenNotOwner() {
-        stubOwnerCourse(ShareInfo.initial());
+        stubOwnerCourseForUpdate(ShareInfo.initial());
 
         assertThatThrownBy(() -> service.updateVisibility(new UpdateCourseVisibilityCommand(COURSE_ID, 99L, true)))
                 .isInstanceOf(BusinessException.class)
@@ -148,7 +163,7 @@ class CourseShareServiceTest {
     @Test
     @DisplayName("없는 코스면 COURSE_NOT_FOUND")
     void updateVisibility_throws_whenCourseNotFound() {
-        given(courseRepository.findById(COURSE_ID)).willReturn(Optional.empty());
+        given(courseRepository.findByIdForUpdate(COURSE_ID)).willReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.updateVisibility(new UpdateCourseVisibilityCommand(COURSE_ID, OWNER, true)))
                 .isInstanceOf(BusinessException.class)
@@ -169,7 +184,6 @@ class CourseShareServiceTest {
         SharedCourseResponse response = service.getShared(TOKEN);
 
         verify(courseRepository).incrementViewCount(COURSE_ID);
-        assertThat(response.id()).isEqualTo(COURSE_ID);
         assertThat(response.title()).isEqualTo("제목");
         assertThat(response.authorNickname()).isEqualTo("부산러버");
         assertThat(response.authorProfileImageUrl()).isEqualTo("https://img/1.png");

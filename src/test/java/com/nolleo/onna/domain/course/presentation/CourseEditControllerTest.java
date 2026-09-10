@@ -10,6 +10,7 @@ import com.nolleo.onna.domain.course.application.service.CourseEditService;
 import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
+import com.nolleo.onna.domain.course.domain.model.vo.ShareInfo;
 import com.nolleo.onna.domain.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -83,7 +84,7 @@ class CourseEditControllerTest {
         CourseItemResponse item = new CourseItemResponse((short) 1, "SPOT", "2760699", "광안리해수욕장",
                 new BigDecimal("129.1187"), new BigDecimal("35.1531"), null, "자연/공원", null, 850);
         return new CourseResponse(10L, UUID.randomUUID(), "AI", TITLE, DESCRIPTION, null,
-                List.of(item), ShareInfoResponse.from(null), OffsetDateTime.now());
+                List.of(item), ShareInfoResponse.from(ShareInfo.initial()), OffsetDateTime.now());
     }
 
     // ── 정상 ───────────────────────────────────────────────────────────────
