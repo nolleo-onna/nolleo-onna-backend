@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -70,6 +71,13 @@ public class PostRepositoryImpl implements PostRepository {
     @Override
     public void incrementViewCount(Long postId) {
         postJpaRepository.incrementViewCount(postId);
+    }
+
+    /** 게시글별로 원자 가산 UPDATE를 실행한다 — 호출자(PostViewCountSink)의 트랜잭션 안에서 함께 커밋된다 */
+    @Override
+    public void addViewCounts(Map<Long, Long> deltaByPostId) {
+        deltaByPostId.forEach((postId, delta) ->
+                postJpaRepository.addViewCount(postId, Math.toIntExact(delta)));
     }
 
     @Override

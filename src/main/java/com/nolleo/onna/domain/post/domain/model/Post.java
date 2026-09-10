@@ -65,4 +65,15 @@ public class Post {
         this.districtTag = districtTag;
         this.updatedAt = OffsetDateTime.now();
     }
+
+    /**
+     * DB에 아직 반영되지 않은 조회수를 표시용 조회수에 더한다.
+     * 조회수는 버퍼(Redis)에 먼저 쌓였다가 주기적으로 DB에 반영되므로, 보여줄 조회수 = 확정(DB) + 대기(버퍼)다.
+     */
+    public void applyPendingViews(long pendingViews) {
+        if (pendingViews < 0) {
+            throw new IllegalArgumentException("대기 조회수는 음수일 수 없습니다.");
+        }
+        this.viewCount = Math.toIntExact(this.viewCount + pendingViews);
+    }
 }

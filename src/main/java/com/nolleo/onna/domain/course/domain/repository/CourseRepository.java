@@ -3,6 +3,7 @@ package com.nolleo.onna.domain.course.domain.repository;
 import com.nolleo.onna.domain.course.domain.model.Course;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -38,8 +39,14 @@ public interface CourseRepository {
      */
     Course saveShareState(Course course, String actor);
 
-    /** 공유 링크 조회수 +1 — 동시 조회에서 유실되지 않도록 원자 UPDATE로 증가시킨다 */
+    /**
+     * 공유 링크 조회수 +1 (원자 UPDATE) — 조회수 버퍼(Redis)를 쓸 수 없을 때의 대체 경로.
+     * 평소에는 버퍼에 쌓였다가 addViewCounts로 일괄 반영된다.
+     */
     void incrementViewCount(Long courseId);
+
+    /** 코스 id별 조회수를 더한다 (view_count = view_count + delta) — 조회수 버퍼 동기화용, 호출자 트랜잭션 안에서 실행된다 */
+    void addViewCounts(Map<Long, Long> deltaByCourseId);
 
     List<Course> findByPairId(UUID pairId);
 

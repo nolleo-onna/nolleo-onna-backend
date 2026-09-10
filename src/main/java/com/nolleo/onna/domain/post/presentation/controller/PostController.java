@@ -2,6 +2,7 @@ package com.nolleo.onna.domain.post.presentation.controller;
 
 import com.nolleo.onna.common.response.ApiResponseDto;
 import com.nolleo.onna.common.security.AuthPrincipal;
+import com.nolleo.onna.common.security.ViewerKeyResolver;
 import com.nolleo.onna.domain.post.application.dto.CreatePostCommand;
 import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
 import com.nolleo.onna.domain.post.application.dto.PostPopularResult;
@@ -23,6 +24,7 @@ import com.nolleo.onna.domain.post.presentation.dto.response.PostPopularResponse
 import com.nolleo.onna.domain.post.presentation.dto.response.PostSummaryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -88,13 +90,19 @@ public class PostController {
     }
 
     @GetMapping("/{postId}")
-    @Operation(summary = "게시글 단건 조회")
+    @Operation(
+            summary = "게시글 단건 조회",
+            description = "같은 사람(로그인: 회원, 비로그인: IP 기준)의 조회는 10분에 1회만 조회수에 집계된다. "
+                    + "응답의 viewCount는 이번 조회까지 반영된 값이며, DB에는 주기적으로(기본 5분) 일괄 반영된다."
+    )
     public ResponseEntity<ApiResponseDto<PostDetailResponse>> getPost(
             @AuthenticationPrincipal AuthPrincipal principal,
-            @PathVariable Long postId
+            @PathVariable Long postId,
+            HttpServletRequest request
     ) {
         Long userId = principal != null ? principal.userId() : null;
-        PostDetailResult result = postQueryService.getPost(postId, userId);
+        String viewerKey = ViewerKeyResolver.resolve(principal, request);
+        PostDetailResult result = postQueryService.getPost(postId, userId, viewerKey);
         return ApiResponseDto.success(200, "게시글 조회 성공", toDetailResponse(result));
     }
 

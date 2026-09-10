@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -79,6 +80,13 @@ public class CourseRepositoryImpl implements CourseRepository {
     @Override
     public void incrementViewCount(Long courseId) {
         jpaRepository.incrementViewCount(courseId);
+    }
+
+    /** 코스별로 원자 가산 UPDATE를 실행한다 — 호출자(CourseViewCountSink)의 트랜잭션 안에서 함께 커밋된다 */
+    @Override
+    public void addViewCounts(Map<Long, Long> deltaByCourseId) {
+        deltaByCourseId.forEach((courseId, delta) ->
+                jpaRepository.addViewCount(courseId, Math.toIntExact(delta)));
     }
 
     @Override
