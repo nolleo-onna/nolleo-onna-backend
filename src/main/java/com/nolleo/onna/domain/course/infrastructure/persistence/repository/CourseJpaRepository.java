@@ -48,4 +48,9 @@ public interface CourseJpaRepository extends JpaRepository<CourseEntity, Long> {
     @Modifying
     @Query("UPDATE CourseEntity c SET c.viewCount = c.viewCount + 1 WHERE c.id = :id")
     void incrementViewCount(@Param("id") Long id);
+
+    /** 조회수 일괄 가산 — 조회수 버퍼 동기화에서 코스별로 호출한다 */
+    @Modifying
+    @Query("UPDATE CourseEntity c SET c.viewCount = c.viewCount + :delta WHERE c.id = :id")
+    void addViewCount(@Param("id") Long id, @Param("delta") int delta);
 }

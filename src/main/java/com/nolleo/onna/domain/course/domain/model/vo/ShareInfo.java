@@ -47,8 +47,15 @@ public record ShareInfo(
         return new ShareInfo(false, shareToken, viewCount, likeCount);
     }
 
-    /** 공유 링크 열람 1회를 메모리 값에 반영한다. DB 카운터는 원자 UPDATE로 따로 증가한다. */
-    public ShareInfo viewed() {
-        return new ShareInfo(isPublic, shareToken, viewCount + 1, likeCount);
+    /**
+     * DB에 아직 반영되지 않은 조회수를 더한 표시용 상태를 돌려준다 — 확정(DB) + 대기(버퍼).
+     * 대기분이 0이면 같은 인스턴스를 돌려준다.
+     */
+    public ShareInfo withPendingViews(long pendingViews) {
+        if (pendingViews < 0) {
+            throw new IllegalArgumentException("대기 조회수는 음수일 수 없습니다.");
+        }
+        if (pendingViews == 0) return this;
+        return new ShareInfo(isPublic, shareToken, Math.toIntExact(viewCount + pendingViews), likeCount);
     }
 }

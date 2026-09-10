@@ -321,7 +321,7 @@ class CourseTest {
     }
 
 
-    // ── 공유 (publish / unpublish / markViewed) ────────────────────────────
+    // ── 공유 (publish / unpublish / applyPendingViews) ─────────────────────
 
     @Test
     @DisplayName("publish는 토큰이 없을 때만 공급자를 호출해 발급하고, 공개 상태로 바꾼다")
@@ -353,8 +353,7 @@ class CourseTest {
     void unpublish_keepsToken_andRepublishReusesIt() {
         Course course = aiCourse();
         course.publish(() -> "token-1");
-        course.markViewed();
-        course.markViewed();
+        course.applyPendingViews(2);
 
         course.unpublish();
         assertThat(course.isPublic()).isFalse();
@@ -368,17 +367,26 @@ class CourseTest {
     }
 
     @Test
-    @DisplayName("markViewed는 메모리상 조회수만 1 올리고 공개 여부·토큰은 건드리지 않는다")
-    void markViewed_incrementsViewCountOnly() {
+    @DisplayName("applyPendingViews는 DB 미반영 조회수를 표시 조회수에 더하고 공개 여부·토큰·좋아요는 건드리지 않는다")
+    void applyPendingViews_addsToViewCountOnly() {
         Course course = aiCourse();
         course.publish(() -> "token-1");
 
-        course.markViewed();
+        course.applyPendingViews(3);
 
-        assertThat(course.getShareInfo().viewCount()).isEqualTo(1);
+        assertThat(course.getShareInfo().viewCount()).isEqualTo(3);
         assertThat(course.getShareInfo().likeCount()).isZero();
         assertThat(course.isPublic()).isTrue();
         assertThat(course.getShareInfo().shareToken()).isEqualTo("token-1");
+    }
+
+    @Test
+    @DisplayName("applyPendingViews는 음수 대기분을 거부한다")
+    void applyPendingViews_throws_whenNegative() {
+        Course course = aiCourse();
+
+        assertThatThrownBy(() -> course.applyPendingViews(-1))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test

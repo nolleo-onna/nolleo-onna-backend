@@ -59,4 +59,9 @@ public interface PostJpaRepository extends JpaRepository<PostEntity, Long> {
     @Modifying
     @Query("UPDATE PostEntity p SET p.viewCount = p.viewCount + 1 WHERE p.id = :id")
     void incrementViewCount(@Param("id") Long id);
+
+    /** 조회수 일괄 가산 — 조회수 버퍼 동기화에서 게시글별로 호출한다 */
+    @Modifying
+    @Query("UPDATE PostEntity p SET p.viewCount = p.viewCount + :delta WHERE p.id = :id")
+    void addViewCount(@Param("id") Long id, @Param("delta") int delta);
 }

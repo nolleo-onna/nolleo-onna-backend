@@ -2,6 +2,7 @@ package com.nolleo.onna.domain.course.application.service;
 
 import com.nolleo.onna.common.application.port.UserLookupPort;
 import com.nolleo.onna.common.application.port.UserLookupPort.UserProfile;
+import com.nolleo.onna.common.application.service.ViewCountRecorder;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.dto.UpdateCourseVisibilityCommand;
@@ -49,12 +50,14 @@ class CourseShareServiceTest {
     @Mock CourseRepository courseRepository;
     @Mock SpotLookupPort spotLookupPort;
     @Mock UserLookupPort userLookupPort;
+    @Mock ViewCountRecorder viewCountRecorder;
 
     @InjectMocks CourseShareService service;
 
     private static final Long OWNER = 1L;
     private static final Long COURSE_ID = 10L;
     private static final String TOKEN = "existing-token";
+    private static final String VIEWER = "u:7";
     private static final CourseIntent INTENT =
             new CourseIntent("광안리", false, null, null, List.of(), null, false);
     private static final SpotCandidate A = new SpotCandidate("A", "A명", null, "NA", "자연/공원",
@@ -174,22 +177,43 @@ class CourseShareServiceTest {
     // ── 공유 링크 조회 ───────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("공개 코스를 토큰으로 조회하면 조회수를 원자 증가시키고, 작성자 닉네임과 스팟 상세를 병합한 응답을 돌려준다")
-    void getShared_returnsCourse_andIncrementsViewCount() {
+    @DisplayName("공개 코스를 토큰으로 조회하면 조회를 버퍼에 기록하고, 표시 조회수에 DB 미반영분을 더해 작성자·스팟 상세와 함께 돌려준다")
+    void getShared_returnsCourse_andRecordsView() {
         given(courseRepository.findPublicByShareToken(TOKEN))
                 .willReturn(Optional.of(savedCourse(OWNER, ShareInfo.of(true, TOKEN, 42, 7))));
+        given(viewCountRecorder.record(eq(CourseViewCountSink.TARGET_TYPE), eq(COURSE_ID.longValue()), eq(VIEWER), any()))
+                .willReturn(1L);
         given(userLookupPort.findById(OWNER)).willReturn(Optional.of(new UserProfile("부산러버", "https://img/1.png")));
         stubSpots();
 
-        SharedCourseResponse response = service.getShared(TOKEN);
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER);
 
-        verify(courseRepository).incrementViewCount(COURSE_ID);
         assertThat(response.title()).isEqualTo("제목");
         assertThat(response.authorNickname()).isEqualTo("부산러버");
         assertThat(response.authorProfileImageUrl()).isEqualTo("https://img/1.png");
-        assertThat(response.viewCount()).isEqualTo(43); // 이번 조회 포함
+        assertThat(response.viewCount()).isEqualTo(43); // DB 42 + 대기 1 (이번 조회 포함)
         assertThat(response.likeCount()).isEqualTo(7);
         assertThat(response.items()).extracting(CourseItemResponse::title).containsExactly("A명");
+        verify(courseRepository, never()).incrementViewCount(anyLong()); // 평소에는 DB에 바로 쓰지 않는다
+    }
+
+    @Test
+    @DisplayName("조회 기록의 DB 대체 경로는 이 코스의 조회수를 DB에서 바로 1 올린다")
+    void getShared_fallbackIncrementsThisCourse() {
+        given(courseRepository.findPublicByShareToken(TOKEN))
+                .willReturn(Optional.of(savedCourse(OWNER, ShareInfo.of(true, TOKEN, 42, 7))));
+        given(viewCountRecorder.record(eq(CourseViewCountSink.TARGET_TYPE), eq(COURSE_ID.longValue()), eq(VIEWER), any()))
+                .willAnswer(invocation -> {
+                    invocation.<Runnable>getArgument(3).run();
+                    return 1L;
+                });
+        given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
+        stubSpots();
+
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER);
+
+        verify(courseRepository).incrementViewCount(COURSE_ID);
+        assertThat(response.viewCount()).isEqualTo(43);
     }
 
     @Test
@@ -200,7 +224,7 @@ class CourseShareServiceTest {
         given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
         stubSpots();
 
-        SharedCourseResponse response = service.getShared(TOKEN);
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER);
 
         assertThat(response.authorNickname()).isNull();
         assertThat(response.authorProfileImageUrl()).isNull();
@@ -208,13 +232,14 @@ class CourseShareServiceTest {
     }
 
     @Test
-    @DisplayName("토큰이 없거나 비공개·삭제된 코스면 COURSE_NOT_FOUND — 조회수도 올리지 않는다")
+    @DisplayName("토큰이 없거나 비공개·삭제된 코스면 COURSE_NOT_FOUND — 조회도 기록하지 않는다")
     void getShared_throws_whenNotPublicOrMissing() {
         given(courseRepository.findPublicByShareToken("unknown")).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getShared("unknown"))
+        assertThatThrownBy(() -> service.getShared("unknown", VIEWER))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_NOT_FOUND);
+        verify(viewCountRecorder, never()).record(anyString(), anyLong(), anyString(), any());
         verify(courseRepository, never()).incrementViewCount(anyLong());
         verify(userLookupPort, never()).findById(anyLong());
     }

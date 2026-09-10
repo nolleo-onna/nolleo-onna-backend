@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.post.application.service;
 
 import com.nolleo.onna.common.application.port.UserLookupPort;
+import com.nolleo.onna.common.application.service.ViewCountRecorder;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
 import com.nolleo.onna.domain.post.application.dto.PostPopularResult;
@@ -29,13 +30,23 @@ public class PostQueryService {
     private final PostRepository postRepository;
     private final PostLikeRepository postLikeRepository;
     private final UserLookupPort userLookupPort;
+    private final ViewCountRecorder viewCountRecorder;
 
+    /**
+     * 게시글 상세 조회. 조회는 조회수 버퍼(Redis)에 기록되고(같은 viewer는 10분에 1회만 집계),
+     * 응답 조회수는 DB 값 + 아직 DB에 반영되지 않은 대기분(이번 조회 포함)이다.
+     * 버퍼 장애 시 DB에 바로 +1 하므로(@Modifying) readOnly 트랜잭션이 아니다.
+     *
+     * @param viewerKey 조회자 식별 키 (ViewerKeyResolver)
+     */
     @Transactional
-    public PostDetailResult getPost(Long postId, Long userId) {
+    public PostDetailResult getPost(Long postId, Long userId, String viewerKey) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException(PostErrorCode.POST_NOT_FOUND));
 
-        postRepository.incrementViewCount(postId);
+        long pendingViews = viewCountRecorder.record(PostViewCountSink.TARGET_TYPE, postId, viewerKey,
+                () -> postRepository.incrementViewCount(postId));
+        post.applyPendingViews(pendingViews);
 
         boolean isLiked = userId != null && postLikeRepository.existsByPostIdAndUserId(postId, userId);
 

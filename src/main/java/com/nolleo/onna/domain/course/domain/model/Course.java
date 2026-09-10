@@ -216,11 +216,11 @@ public class Course {
     }
 
     /**
-     * 공유 링크로 열람됐음을 반영한다 — 메모리상 조회수만 +1.
-     * DB의 view_count는 동시 조회에서 유실되지 않도록 CourseRepository.incrementViewCount(원자 UPDATE)로 따로 올린다.
+     * DB에 아직 반영되지 않은 공유 링크 조회수를 표시용 조회수에 더한다.
+     * 조회수는 버퍼(Redis)에 먼저 쌓였다가 주기적으로 DB에 반영되므로, 보여줄 조회수 = 확정(DB) + 대기(버퍼)다.
      */
-    public void markViewed() {
-        this.shareInfo = shareInfo.viewed();
+    public void applyPendingViews(long pendingViews) {
+        this.shareInfo = shareInfo.withPendingViews(pendingViews);
     }
 
     /** 코스를 생성한 사용자인지 검증 — 조회·수정 공통 규칙 */
