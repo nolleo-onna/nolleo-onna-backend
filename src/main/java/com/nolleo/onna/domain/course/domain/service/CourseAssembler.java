@@ -24,7 +24,7 @@ public class CourseAssembler {
     public record Waypoint(String refId, double latitude, double longitude) {
     }
 
-    public record AssembledItem(Waypoint waypoint, short distanceFromPrevM) {
+    public record AssembledItem(Waypoint waypoint, int distanceFromPrevM) {
     }
 
     public static List<AssembledItem> assemble(double startLat, double startLon, List<Waypoint> candidates) {
@@ -43,10 +43,31 @@ public class CourseAssembler {
                     nearest = candidate;
                 }
             }
-            result.add(new AssembledItem(nearest, (short) Math.round(nearestDistance)));
+            result.add(new AssembledItem(nearest, (int) Math.round(nearestDistance)));
             remaining.remove(nearest);
             curLat = nearest.latitude();
             curLon = nearest.longitude();
+        }
+        return result;
+    }
+
+    /**
+     * 전달된 순서를 그대로 유지한 채 인접 구간 직선거리만 계산한다.
+     *
+     * assemble()과 달리 방문 순서를 재배치하지 않는다 — 사용자가 편집으로 확정한 순서를
+     * 서버가 다시 최적화해 버리면 편집 결과가 뒤집히기 때문이다.
+     * 첫 지점의 거리는 assemble()과 동일하게 시작 좌표(지역 중심) 기준으로 잰다.
+     */
+    public static List<AssembledItem> measure(double startLat, double startLon, List<Waypoint> waypointsInOrder) {
+        List<AssembledItem> result = new ArrayList<>();
+        double curLat = startLat;
+        double curLon = startLon;
+
+        for (Waypoint waypoint : waypointsInOrder) {
+            double distance = haversineMeters(curLat, curLon, waypoint.latitude(), waypoint.longitude());
+            result.add(new AssembledItem(waypoint, (int) Math.round(distance)));
+            curLat = waypoint.latitude();
+            curLon = waypoint.longitude();
         }
         return result;
     }

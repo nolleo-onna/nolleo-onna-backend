@@ -1,10 +1,12 @@
 // [Common] 전역 예외 핸들러 — @RestControllerAdvice로 앱 전체 예외를 가로채 ErrorResponseDto로 변환해 응답.
-// BusinessException(도메인 오류), @Valid 검증 오류, HTTP 메서드 오류, 500 내부 오류를 계층별로 처리.
+// BusinessException(도메인 오류), @Valid 검증 오류, 본문 역직렬화 오류(400), 동시 수정 충돌(409), HTTP 메서드 오류, 500 내부 오류를 계층별로 처리.
 package com.nolleo.onna.common.exception;
 
 import com.nolleo.onna.common.response.ErrorResponseDto;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -55,6 +57,20 @@ public class GlobalExceptionHandler {
     protected ResponseEntity<ErrorResponseDto> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException e) {
         log.warn("타입이 일치하지 않습니다");
         return  ErrorResponseDto.fail(CommonErrorCode.METHOD_TYPE_MISMATCH, e.getMessage());
+    }
+
+    // HttpMessageNotReadableException — JSON 문법 오류, 타입 불일치(e.g. 배열 자리에 문자열) 등 요청 본문 역직렬화 실패
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    protected ResponseEntity<ErrorResponseDto> handleHttpMessageNotReadableException(HttpMessageNotReadableException e) {
+        log.warn("MESSAGE_NOT_READABLE - {}", e.getMessage());
+        return ErrorResponseDto.fail(CommonErrorCode.INVALID_INPUT_VALUE, "요청 본문 형식이 올바르지 않습니다");
+    }
+
+    // OptimisticLockingFailureException — 같은 자원을 동시에 수정해 먼저 커밋된 변경과 충돌 (e.g. 코스 저장 더블클릭)
+    @ExceptionHandler(OptimisticLockingFailureException.class)
+    protected ResponseEntity<ErrorResponseDto> handleOptimisticLockingFailureException(OptimisticLockingFailureException e) {
+        log.warn("CONCURRENT_MODIFICATION - {}", e.getMessage());
+        return ErrorResponseDto.fail(CommonErrorCode.CONCURRENT_MODIFICATION);
     }
 
     // IllegalArgumentException — 도메인 객체 내부 방어 검증 실패 (프로그래밍 오류)

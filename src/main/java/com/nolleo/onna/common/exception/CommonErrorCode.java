@@ -15,7 +15,8 @@ public enum CommonErrorCode implements ErrorCode {
     NO_HANDLER_FOUND(404, "NO_HANDLER_FOUND", "존재하지 않는 URL입니다"),
     METHOD_TYPE_MISMATCH(400, "METHOD_TYPE_MISMATCH", "타입이 일치하지 않습니다"),
     UNAUTHORIZED(401, "UNAUTHORIZED", "인증이 필요합니다"),
-    FORBIDDEN(403, "FORBIDDEN", "접근 권한이 없습니다");
+    FORBIDDEN(403, "FORBIDDEN", "접근 권한이 없습니다"),
+    CONCURRENT_MODIFICATION(409, "CONCURRENT_MODIFICATION", "다른 요청이 먼저 변경했습니다. 최신 상태를 다시 조회해 주세요");
 
     private final int status;
     private final String errorCode;

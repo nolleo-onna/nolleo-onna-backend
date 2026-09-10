@@ -39,6 +39,12 @@ public class SpotRepositoryImpl implements SpotsRepository {
     }
 
     @Override
+    public List<Spot> findActiveByIds(List<String> contentIds) {
+        if (contentIds.isEmpty()) return List.of();
+        return jpaRepository.findActiveByIds(contentIds).stream().map(SpotEntity::toDomain).toList();
+    }
+
+    @Override
     public List<Spot> findNearbyByCategory(String lclsSystm1, double lat, double lon) {
         return jpaRepository.findNearbyByCategory(lclsSystm1, lat, lon).stream()
                 .map(SpotEntity::toDomain)

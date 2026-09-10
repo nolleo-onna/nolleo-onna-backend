@@ -9,6 +9,7 @@ import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
+import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotPlan;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
@@ -97,7 +98,7 @@ public class CourseGenerationService {
         for (CourseAssembler.AssembledItem item : assembled) {
             SpotCandidate spot = selected.get(item.waypoint().refId());
             Integer expectedCost = spot.isFood() ? priceByContentId.get(spot.contentId()) : null;
-            course.addItem(spot.contentId(), expectedCost, item.distanceFromPrevM());
+            course.addItem(PlaceRef.spot(spot.contentId()), expectedCost, item.distanceFromPrevM());
         }
 
         List<String> spotTitlesInOrder = assembled.stream()
