@@ -10,6 +10,15 @@ public interface CourseRepository {
 
     Course save(Course course);
 
+    /**
+     * 코스 편집 결과를 반영한다 — 제목 · 소개 · 방문 스팟 목록 · totalCost (코스 수정 = 최종 상태 일괄 반영).
+     * 기존 아이템 행은 전부 삭제되고 새 순번으로 다시 삽입된다.
+     * 공유 상태 · 조회수 · 좋아요 수는 반영하지 않는다 — 각자 전용 경로로 변경한다.
+     *
+     * @param actor 변경 주체. updated_by와, 새로 삽입되는 아이템 행의 created_by에 기록된다
+     */
+    Course saveEdited(Course course, String actor);
+
     Optional<Course> findById(Long id);
 
     List<Course> findByPairId(UUID pairId);
