@@ -142,13 +142,16 @@ public class CourseEntity {
     }
 
     /**
-     * 재계산된 아이템 목록과 총비용을 반영한다 (코스 수정의 일괄 반영 지점).
+     * 코스 편집 결과를 반영한다 — 제목 · 소개 · 재계산된 아이템 목록 · 총비용 (코스 수정의 일괄 반영 지점).
      * clearItems() 이후에 호출하는 것을 전제로 하며, 순번은 도메인이 이미 1부터 재부여한 값이다.
+     * 공유 상태와 카운터(view_count · like_count)는 건드리지 않는다.
      * 새로 삽입되는 아이템 행의 created_by는 코스 생성 주체가 아니라 이번 변경 주체(updatedBy)로 기록한다.
      */
-    public void applyItems(List<CourseItem> newItems, Integer totalCost, String updatedBy) {
-        newItems.forEach(item -> items.add(CourseItemEntity.fromDomain(item, this, updatedBy)));
-        this.totalCost = totalCost;
+    public void applyEdit(Course edited, String updatedBy) {
+        this.title = edited.getTitle();
+        this.description = edited.getDescription();
+        edited.getItems().forEach(item -> items.add(CourseItemEntity.fromDomain(item, this, updatedBy)));
+        this.totalCost = edited.getTotalCost();
         if (this.updateAudit == null) this.updateAudit = UpdateAudit.now();
         this.updateAudit.touch(updatedBy);
     }

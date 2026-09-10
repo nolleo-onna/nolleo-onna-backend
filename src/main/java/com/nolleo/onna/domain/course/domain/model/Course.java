@@ -30,6 +30,12 @@ import java.util.stream.Collectors;
 @Getter
 public class Course {
 
+    /** 코스 제목 최대 길이 (앞뒤 공백 제거 후) — 요청 DTO의 @Size와 에러 메시지도 이 값을 참조한다 */
+    public static final int MAX_TITLE_LENGTH = 50;
+
+    /** 코스 소개 최대 길이 (앞뒤 공백 제거 후) — 요청 DTO의 @Size와 에러 메시지도 이 값을 참조한다 */
+    public static final int MAX_DESCRIPTION_LENGTH = 200;
+
     /**
      * 코스 수정 시 전달하는 방문 장소의 최종 상태 — 방문 순서대로 담긴다.
      * 순번과 인접 거리는 담지 않는다. 좌표만 넘기면 애그리거트가 계산한다 (replaceItems).
@@ -55,10 +61,10 @@ public class Course {
     /** 코스 타입 — ALGORITHM 모드 전용, AI 모드는 null */
     private final CourseType courseType;
 
-    /** 코스 제목 — AI: 질문 기반 생성 / ALGORITHM: 템플릿 */
+    /** 코스 제목 — AI: 질문 기반 생성 / ALGORITHM: 템플릿. 생성 후 사용자가 편집할 수 있다 (edit) */
     private String title;
 
-    /** 코스 소개 문구 — AI: 완성된 코스에 대한 소개 생성 / ALGORITHM: 템플릿 */
+    /** 코스 소개 문구 — AI: 완성된 코스에 대한 소개 생성 / ALGORITHM: 템플릿. 생성 후 사용자가 편집할 수 있다 (edit) */
     private String description;
 
     /** 코스 생성 의도 스냅샷 (JSONB) — 재현·디버깅용 */
@@ -148,6 +154,21 @@ public class Course {
     }
 
     /**
+     * 사용자가 편집을 마친 최종 상태로 코스를 교체한다 — 제목 · 소개 · 방문 스팟 목록 (Full State Replacement).
+     *
+     * 제목은 앞뒤 공백을 제거해 1~MAX_TITLE_LENGTH자여야 한다.
+     * 소개는 선택이며 비우면 null, 앞뒤 공백을 제거해 최대 MAX_DESCRIPTION_LENGTH자다.
+     * 제목·소개·스팟 목록 검증을 모두 통과해야 반영하므로, 하나라도 실패하면 코스는 편집 전 상태 그대로다.
+     */
+    public void edit(String title, String description, List<VisitStop> stops) {
+        String editedTitle = normalizeTitle(title);
+        String editedDescription = normalizeDescription(description);
+        replaceItems(stops); // 스팟 검증 실패 시 여기서 예외 — 제목·소개는 아직 바뀌지 않았다
+        this.title = editedTitle;
+        this.description = editedDescription;
+    }
+
+    /**
      * 방문 스팟 목록을 최종 상태로 통째 교체한다 (Full State Replacement).
      *
      * 순번·인접 거리·totalCost는 모두 애그리거트가 계산한다. 호출자는 방문 순서와 좌표·비용만 넘기므로
@@ -192,6 +213,27 @@ public class Course {
         if (title == null || title.isBlank()) throw new IllegalArgumentException("제목은 비어 있을 수 없습니다.");
         this.title = title;
         this.description = description;
+    }
+
+    /** 사용자가 편집한 제목 — 앞뒤 공백 제거 후 1~MAX_TITLE_LENGTH자 */
+    private static String normalizeTitle(String title) {
+        String stripped = title == null ? "" : title.strip();
+        if (stripped.isEmpty() || stripped.length() > MAX_TITLE_LENGTH) {
+            throw new BusinessException(CourseErrorCode.COURSE_TITLE_INVALID);
+        }
+        return stripped;
+    }
+
+    /** 사용자가 편집한 소개 — 비우면 null, 앞뒤 공백 제거 후 최대 MAX_DESCRIPTION_LENGTH자 */
+    private static String normalizeDescription(String description) {
+        if (description == null || description.isBlank()) {
+            return null;
+        }
+        String stripped = description.strip();
+        if (stripped.length() > MAX_DESCRIPTION_LENGTH) {
+            throw new BusinessException(CourseErrorCode.COURSE_DESCRIPTION_TOO_LONG);
+        }
+        return stripped;
     }
 
     /**

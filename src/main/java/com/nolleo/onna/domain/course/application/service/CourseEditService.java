@@ -2,7 +2,7 @@ package com.nolleo.onna.domain.course.application.service;
 
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
-import com.nolleo.onna.domain.course.application.dto.UpdateCourseItemsCommand;
+import com.nolleo.onna.domain.course.application.dto.UpdateCourseCommand;
 import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
 import com.nolleo.onna.domain.course.application.port.SpotLookupPort;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 코스 수정 — 방문 스팟 목록 일괄 반영 (Full State Replacement).
+ * 코스 수정 — 제목 · 소개 · 방문 스팟 목록 일괄 반영 (Full State Replacement).
  *
  * 순서:
  *   1. 코스 조회 + 소유자 검증 (Course.validateOwnedBy)
@@ -28,12 +28,12 @@ import java.util.Map;
  *   3. 시작 지역 해석 (Course.startPoint) — 스팟 조회 전에 끊기 위해 먼저 확인한다
  *   4. 활성 스팟 존재 · 좌표 검증 (SpotLookupPort.findActiveByIds)
  *   5. FD 카테고리만 가격 조회
- *   6. 애그리거트 교체 (Course.replaceItems — 순번 · 인접 거리 · totalCost를 애그리거트가 계산)
+ *   6. 애그리거트 편집 (Course.edit — 제목·소개 검증, 순번 · 인접 거리 · totalCost 계산을 애그리거트가 수행)
  *   7. 저장 1회
  *
  * 규칙 판단은 도메인에 위임하고, 이 서비스는 조회 · 변환 · 저장 순서만 조율한다.
  * 생성 파이프라인과 달리 외부 AI 호출이 없으므로 전체를 하나의 트랜잭션으로 묶는다.
- * 저장 1회 = 트랜잭션 1회라 "삭제는 됐는데 재배치는 실패한" 중간 상태가 남지 않는다.
+ * 저장 1회 = 트랜잭션 1회라 "제목은 바뀌었는데 스팟 교체는 실패한" 중간 상태가 남지 않는다.
  *
  * 이번 범위는 SPOT만 허용한다. FOOD는 PlaceLookupPort 도입 시 2·4·5단계가 바뀐다.
  */
@@ -45,7 +45,7 @@ public class CourseEditService {
     private final CourseRepository courseRepository;
     private final SpotLookupPort spotLookupPort;
 
-    public CourseResponse updateItems(UpdateCourseItemsCommand command) {
+    public CourseResponse updateCourse(UpdateCourseCommand command) {
         Course course = courseRepository.findById(command.courseId())
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.COURSE_NOT_FOUND));
         course.validateOwnedBy(command.userId());
@@ -62,9 +62,9 @@ public class CourseEditService {
         List<VisitStop> stops = places.refs().stream()
                 .map(ref -> toVisitStop(ref, spotById.get(ref.originalId()), priceByContentId))
                 .toList();
-        course.replaceItems(stops);
+        course.edit(command.title(), command.description(), stops);
 
-        Course updated = courseRepository.saveReplacedItems(course, String.valueOf(command.userId()));
+        Course updated = courseRepository.saveEdited(course, String.valueOf(command.userId()));
 
         Map<PlaceRef, SpotCandidate> spotByRef = new HashMap<>();
         places.refs().forEach(ref -> spotByRef.put(ref, spotById.get(ref.originalId())));

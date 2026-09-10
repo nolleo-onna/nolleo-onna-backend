@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.course.presentation.dto.request;
 
-import com.nolleo.onna.domain.course.application.dto.UpdateCourseItemsCommand;
+import com.nolleo.onna.domain.course.application.dto.UpdateCourseCommand;
+import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaceType;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
@@ -15,14 +16,23 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 /**
- * 코스 방문 스팟 목록 일괄 반영 요청 (Full State Replacement).
+ * 코스 수정 요청 — 편집을 마친 제목 · 소개 · 방문 스팟 목록을 한 번에 보낸다 (Full State Replacement).
  *
- * 편집이 끝난 최종 리스트를 그대로 보낸다. 순번은 담지 않는다 —
- * 배열에서의 위치가 곧 방문 순번이 되므로, 추가·삭제·순서 변경으로 생기는
+ * 바뀌지 않은 필드도 현재 값을 담아 보낸다. 소개를 비우거나 생략하면 소개가 지워진다(null).
+ * 방문 스팟은 순번을 담지 않는다 — 배열에서의 위치가 곧 방문 순번이 되므로, 추가·삭제·순서 변경으로 생기는
  * 순번 밀림은 클라이언트의 배열 조작에서 이미 반영된 상태다.
  */
-@Schema(description = "코스 방문 스팟 목록 일괄 반영 요청 — 편집을 마친 최종 리스트")
-public record UpdateCourseItemsRequest(
+@Schema(description = "코스 수정 요청 — 편집을 마친 제목·소개·방문 스팟 목록")
+public record UpdateCourseRequest(
+
+        @Schema(description = "코스 제목. 앞뒤 공백은 제거된다.", example = "광안리 바다 산책 코스")
+        @NotBlank(message = "코스 제목은 필수입니다.")
+        @Size(max = Course.MAX_TITLE_LENGTH, message = "코스 제목은 최대 {max}자까지 입력할 수 있습니다.")
+        String title,
+
+        @Schema(description = "코스 소개. 선택이며, 비우거나 생략하면 소개가 지워진다(null).", example = "바다를 따라 걷고 카페에서 쉬어 가는 코스입니다.")
+        @Size(max = Course.MAX_DESCRIPTION_LENGTH, message = "코스 소개는 최대 {max}자까지 입력할 수 있습니다.")
+        String description,
 
         @Schema(description = "방문할 장소 목록. 배열 순서가 곧 방문 순서(1번부터)이며, 같은 장소를 두 번 담을 수 없다.")
         @NotEmpty(message = "코스에는 최소 1개의 방문 스팟이 필요합니다.")
@@ -47,10 +57,12 @@ public record UpdateCourseItemsRequest(
         }
     }
 
-    public UpdateCourseItemsCommand toCommand(Long courseId, Long userId) {
-        return new UpdateCourseItemsCommand(
+    public UpdateCourseCommand toCommand(Long courseId, Long userId) {
+        return new UpdateCourseCommand(
                 courseId,
                 userId,
+                title,
+                description,
                 items.stream().map(Item::toPlaceRef).toList()
         );
     }

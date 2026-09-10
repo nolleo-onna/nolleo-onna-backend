@@ -24,7 +24,7 @@ public class CourseRepositoryImpl implements CourseRepository {
     }
 
     /**
-     * 아이템 전량 교체.
+     * 코스 편집 결과 반영 — 제목·소개 갱신 + 아이템 전량 교체.
      *
      * 삭제(flush)와 삽입을 명시적으로 분리한다. (course_id, serial_num)에 UNIQUE가 걸려 있어,
      * 순서만 바꾼 편집("1번을 3번으로")에서 새 행 INSERT가 기존 행 DELETE보다 먼저 나가면
@@ -34,14 +34,14 @@ public class CourseRepositoryImpl implements CourseRepository {
      * 관리 엔티티이므로 save(merge)는 필요 없고 flush만으로 반영된다.
      */
     @Override
-    public Course saveReplacedItems(Course course, String actor) {
+    public Course saveEdited(Course course, String actor) {
         CourseEntity entity = jpaRepository.findById(course.getId())
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.COURSE_NOT_FOUND));
 
         entity.clearItems();
         jpaRepository.flush();
 
-        entity.applyItems(course.getItems(), course.getTotalCost(), actor);
+        entity.applyEdit(course, actor);
         jpaRepository.flush();
         return entity.toDomain();
     }
