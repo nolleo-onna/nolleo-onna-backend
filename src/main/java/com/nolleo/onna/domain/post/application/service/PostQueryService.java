@@ -37,6 +37,9 @@ public class PostQueryService {
      * 응답 조회수는 DB 값 + 아직 DB에 반영되지 않은 대기분(이번 조회 포함)이다.
      * 버퍼 장애 시 DB에 바로 +1 하므로(@Modifying) readOnly 트랜잭션이 아니다.
      *
+     * 조회 기록은 다른 조회가 모두 성공한 뒤 마지막에 한다 — 뒤 단계가 실패해 롤백돼도 되돌릴 수 없는 Redis 집계만 남는 일을 막는다.
+     * Redis 호출이 트랜잭션(DB 커넥션 점유) 안에서 일어나므로 지연 상한은 spring.data.redis.timeout으로 제한한다.
+     *
      * @param viewerKey 조회자 식별 키 (ViewerKeyResolver)
      */
     @Transactional
@@ -44,15 +47,15 @@ public class PostQueryService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException(PostErrorCode.POST_NOT_FOUND));
 
-        long pendingViews = viewCountRecorder.record(PostViewCountSink.TARGET_TYPE, postId, viewerKey,
-                () -> postRepository.incrementViewCount(postId));
-        post.applyPendingViews(pendingViews);
-
         boolean isLiked = userId != null && postLikeRepository.existsByPostIdAndUserId(postId, userId);
 
         UserLookupPort.UserProfile profile = userLookupPort.findById(post.getUserId()).orElse(null);
         String nickname = profile != null ? profile.nickname() : "알 수 없음";
         String profileImageUrl = profile != null ? profile.profileImageUrl() : null;
+
+        long pendingViews = viewCountRecorder.record(PostViewCountSink.TARGET_TYPE, postId, viewerKey,
+                () -> postRepository.incrementViewCount(postId));
+        post.applyPendingViews(pendingViews);
 
         return new PostDetailResult(post, nickname, profileImageUrl, isLiked);
     }
