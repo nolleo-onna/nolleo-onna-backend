@@ -32,9 +32,11 @@ import java.util.Map;
  *   기다렸다가 이미 발급된 토큰을 읽으므로, 토큰이 두 번 발급되어 먼저 받은 링크가 404가 되는 일이 없다.
  *
  * 공유 링크 열람 (getShared):
- *   공개 코스 조회 → 조회 기록(ViewCountRecorder — 버퍼에 누적, 같은 viewer는 10분에 1회) → 표시 조회수 = DB + 대기분
- *   → 작성자 닉네임(UserLookupPort) → 스팟 상세 병합
+ *   공개 코스 조회 → 작성자 닉네임(UserLookupPort) → 스팟 상세 → 조회 기록(ViewCountRecorder — 버퍼에 누적,
+ *   같은 viewer는 10분에 1회) → 표시 조회수 = DB + 대기분
  *   조회수는 ViewCountFlushService가 주기적으로 DB에 일괄 반영한다. 버퍼를 쓸 수 없으면 DB에 바로 +1 한다.
+ *   조회 기록을 마지막에 두어 앞 단계가 실패하면 집계하지 않는다(Redis 집계는 트랜잭션 롤백으로 되돌려지지 않는다).
+ *   Redis 호출이 트랜잭션(DB 커넥션 점유) 안에서 일어나므로 지연 상한은 spring.data.redis.timeout으로 제한한다.
  *   토큰 미존재 · 비공개 · 삭제를 구분하지 않고 모두 COURSE_NOT_FOUND — 존재 여부를 노출하지 않는다.
  *   버퍼 장애 시 DB 증가(@Modifying)로 대체하므로 readOnly 트랜잭션이 아니어야 한다.
  *
@@ -72,13 +74,15 @@ public class CourseShareService {
         Course course = courseRepository.findPublicByShareToken(shareToken)
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.COURSE_NOT_FOUND));
 
+        UserProfile author = userLookupPort.findById(course.getUserId()).orElse(null);
+        Map<PlaceRef, SpotCandidate> spotByRef = loadSpots(course);
+
         Long courseId = course.getId();
         long pendingViews = viewCountRecorder.record(CourseViewCountSink.TARGET_TYPE, courseId, viewerKey,
                 () -> courseRepository.incrementViewCount(courseId));
         course.applyPendingViews(pendingViews);
 
-        UserProfile author = userLookupPort.findById(course.getUserId()).orElse(null);
-        return SharedCourseResponse.of(course, loadSpots(course), author);
+        return SharedCourseResponse.of(course, spotByRef, author);
     }
 
     /** 코스가 참조하는 스팟 상세를 한 번에 조회한다. 현재 코스는 SPOT만 담으므로 SpotLookupPort로 충분하다. */

@@ -232,6 +232,20 @@ class CourseShareServiceTest {
     }
 
     @Test
+    @DisplayName("스팟 상세 조회 등 앞 단계가 실패하면 조회를 기록하지 않는다 — 조회 기록은 마지막 단계다")
+    void getShared_doesNotRecordView_whenEarlierStepFails() {
+        given(courseRepository.findPublicByShareToken(TOKEN))
+                .willReturn(Optional.of(savedCourse(OWNER, ShareInfo.of(true, TOKEN, 42, 7))));
+        given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
+        given(spotLookupPort.findByIds(List.of("A"))).willThrow(new IllegalStateException("스팟 조회 실패"));
+
+        assertThatThrownBy(() -> service.getShared(TOKEN, VIEWER))
+                .isInstanceOf(IllegalStateException.class);
+        verify(viewCountRecorder, never()).record(anyString(), anyLong(), anyString(), any());
+        verify(courseRepository, never()).incrementViewCount(anyLong());
+    }
+
+    @Test
     @DisplayName("토큰이 없거나 비공개·삭제된 코스면 COURSE_NOT_FOUND — 조회도 기록하지 않는다")
     void getShared_throws_whenNotPublicOrMissing() {
         given(courseRepository.findPublicByShareToken("unknown")).willReturn(Optional.empty());
