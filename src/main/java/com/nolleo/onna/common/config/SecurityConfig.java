@@ -63,7 +63,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/map/**").permitAll()
                         .requestMatchers("/api/v1/spots/**").permitAll()
                         .requestMatchers("/api/v1/food/**").permitAll()
-                        .requestMatchers("/api/v1/events/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events/**").permitAll()
                         // 날씨·혼잡도 — 비로그인 사용자도 접근 가능
                         .requestMatchers("/api/v1/weather/**").permitAll()
                         .requestMatchers("/api/v1/congestion/**").permitAll()
