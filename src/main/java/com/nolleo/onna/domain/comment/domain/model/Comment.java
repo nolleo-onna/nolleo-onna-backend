@@ -39,6 +39,11 @@ public class Comment {
         return new Comment(id, postId, userId, parentCommentId, content, deleted, createdAt, updatedAt);
     }
 
+    public void updateContent(String content) {
+        this.content = content;
+        this.updatedAt = OffsetDateTime.now();
+    }
+
     public void softDelete() {
         this.content = "삭제된 댓글입니다.";
         this.deleted = true;
