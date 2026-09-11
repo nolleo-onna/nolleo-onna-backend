@@ -4,6 +4,7 @@ import com.nolleo.onna.common.application.port.UserLookupPort;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.comment.application.dto.CommentResult;
 import com.nolleo.onna.domain.comment.application.dto.CreateCommentCommand;
+import com.nolleo.onna.domain.comment.application.dto.UpdateCommentCommand;
 import com.nolleo.onna.domain.comment.domain.exception.CommentErrorCode;
 import com.nolleo.onna.domain.comment.domain.model.Comment;
 import com.nolleo.onna.domain.comment.domain.repository.CommentRepository;
@@ -59,6 +60,38 @@ public class CommentCommandService {
                 List.of(),
                 saved.getCreatedAt(),
                 saved.getUpdatedAt()
+        );
+    }
+
+    public CommentResult updateComment(Long userId, UpdateCommentCommand command) {
+        Comment comment = commentRepository.findById(command.commentId())
+                .orElseThrow(() -> new BusinessException(CommentErrorCode.COMMENT_NOT_FOUND));
+
+        if (!comment.getUserId().equals(userId)) {
+            throw new BusinessException(CommentErrorCode.COMMENT_ACCESS_DENIED);
+        }
+
+        if (comment.isDeleted()) {
+            throw new BusinessException(CommentErrorCode.COMMENT_ALREADY_DELETED);
+        }
+
+        comment.updateContent(command.content());
+        commentRepository.update(comment);
+
+        UserLookupPort.UserProfile profile = userLookupPort.findById(userId).orElse(null);
+        String nickname = profile != null ? profile.nickname() : "알 수 없음";
+        String profileImageUrl = profile != null ? profile.profileImageUrl() : null;
+
+        return new CommentResult(
+                comment.getId(),
+                nickname,
+                profileImageUrl,
+                comment.getContent(),
+                comment.isDeleted(),
+                comment.getParentCommentId(),
+                List.of(),
+                comment.getCreatedAt(),
+                comment.getUpdatedAt()
         );
     }
 
