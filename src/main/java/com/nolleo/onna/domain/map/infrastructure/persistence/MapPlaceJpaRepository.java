@@ -14,17 +14,18 @@ import java.util.Optional;
 
 public interface MapPlaceJpaRepository extends JpaRepository<MapPlaceEntity, Long> {
 
+    // keyword가 null이면 타입 없이 바인딩돼 PostgreSQL이 bytea로 해석하고 lower(bytea) 오류가 난다 — CAST로 문자열 타입을 고정한다.
     @Query(value = "SELECT e FROM MapPlaceEntity e WHERE e.active = true " +
                   "AND (:district IS NULL OR e.district = :district) " +
                   "AND (:category IS NULL OR e.category = :category) " +
                   "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice IS NULL OR e.minPrice <= :maxBudget) " +
-                  "AND (:keyword IS NULL OR LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
+                  "AND (CAST(:keyword AS String) IS NULL OR LOWER(e.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS String), '%'))) " +
                   "ORDER BY CASE WHEN e.category = 'VE' THEN 0 ELSE 1 END",
            countQuery = "SELECT COUNT(e) FROM MapPlaceEntity e WHERE e.active = true " +
                        "AND (:district IS NULL OR e.district = :district) " +
                        "AND (:category IS NULL OR e.category = :category) " +
                        "AND (:maxBudget IS NULL OR e.free = true OR e.minPrice IS NULL OR e.minPrice <= :maxBudget) " +
-                       "AND (:keyword IS NULL OR LOWER(e.name) LIKE LOWER(CONCAT('%', :keyword, '%')))")
+                       "AND (CAST(:keyword AS String) IS NULL OR LOWER(e.name) LIKE LOWER(CONCAT('%', CAST(:keyword AS String), '%')))")
     Page<MapPlaceEntity> findByFilterPaged(
         @Param("district") String district,
         @Param("category") PlaceCategory category,
