@@ -59,10 +59,11 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         // OAuth 로그인 시작·콜백
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
-                        // 지도·장소 조회 — 비로그인 사용자도 접근 가능
+                        // 지도·장소·행사 조회 — 비로그인 사용자도 접근 가능
                         .requestMatchers("/api/v1/map/**").permitAll()
                         .requestMatchers("/api/v1/spots/**").permitAll()
                         .requestMatchers("/api/v1/food/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/events/**").permitAll()
                         // 날씨·혼잡도 — 비로그인 사용자도 접근 가능
                         .requestMatchers("/api/v1/weather/**").permitAll()
                         .requestMatchers("/api/v1/congestion/**").permitAll()
