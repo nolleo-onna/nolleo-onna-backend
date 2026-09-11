@@ -3,6 +3,7 @@
 package com.nolleo.onna.common.exception;
 
 import com.nolleo.onna.common.response.ErrorResponseDto;
+import com.nolleo.onna.domain.image.domain.exception.ImageErrorCode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -71,6 +73,13 @@ public class GlobalExceptionHandler {
     protected ResponseEntity<ErrorResponseDto> handleOptimisticLockingFailureException(OptimisticLockingFailureException e) {
         log.warn("CONCURRENT_MODIFICATION - {}", e.getMessage());
         return ErrorResponseDto.fail(CommonErrorCode.CONCURRENT_MODIFICATION);
+    }
+
+    // MaxUploadSizeExceededException — multipart 한도(파일 10MB / 요청 55MB) 초과. 파일 업로드 API는 이미지 업로드뿐이라 IMG002로 응답
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    protected ResponseEntity<ErrorResponseDto> handleMaxUploadSizeExceededException(MaxUploadSizeExceededException e) {
+        log.warn("FILE_SIZE_EXCEEDED - {}", e.getMessage());
+        return ErrorResponseDto.fail(ImageErrorCode.FILE_SIZE_EXCEEDED);
     }
 
     // IllegalArgumentException — 도메인 객체 내부 방어 검증 실패 (프로그래밍 오류)
