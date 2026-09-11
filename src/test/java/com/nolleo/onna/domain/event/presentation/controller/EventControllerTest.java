@@ -2,15 +2,16 @@ package com.nolleo.onna.domain.event.presentation.controller;
 
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.common.security.jwt.JwtProvider;
+import com.nolleo.onna.domain.event.application.dto.EventDetailResult;
 import com.nolleo.onna.domain.event.application.service.EventQueryService;
 import com.nolleo.onna.domain.event.domain.exception.EventErrorCode;
-import com.nolleo.onna.domain.event.presentation.dto.response.EventDetailResponse;
+import com.nolleo.onna.domain.event.domain.model.Event;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -18,12 +19,13 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(EventController.class)
-@WithMockUser
+@AutoConfigureMockMvc(addFilters = false) // 행사 조회는 비로그인 접근 허용 — 인증 필터 없이 테스트
 class EventControllerTest {
 
     @Autowired MockMvc mockMvc;
@@ -34,7 +36,7 @@ class EventControllerTest {
     @DisplayName("GET /api/v1/events - 200 OK와 행사 목록을 반환한다")
     void getEvents_returns200WithEventList() throws Exception {
         // given
-        List<EventDetailResponse> events = List.of(buildEventDetailResponse("2991394"));
+        List<EventDetailResult> events = List.of(buildEventDetailResult("2991394"));
         given(eventQueryService.getEvents()).willReturn(events);
 
         // when & then
@@ -67,7 +69,7 @@ class EventControllerTest {
     void getEventDetail_returns200WithDetail() throws Exception {
         // given
         String contentId = "2991394";
-        given(eventQueryService.getEventDetail(contentId)).willReturn(buildEventDetailResponse(contentId));
+        given(eventQueryService.getEventDetail(contentId)).willReturn(buildEventDetailResult(contentId));
 
         // when & then
         mockMvc.perform(get("/api/v1/events/{contentId}", contentId))
@@ -95,28 +97,28 @@ class EventControllerTest {
                 .andExpect(jsonPath("$.message").value("행사를 찾을 수 없습니다"));
     }
 
-    private EventDetailResponse buildEventDetailResponse(String contentId) {
-        return new EventDetailResponse(
-                contentId,
-                "2026 부산나이트워크42K with dsec",
-                LocalDate.of(2026, 8, 29),
-                LocalDate.of(2026, 8, 30),
-                new BigDecimal("129.1273173"),
-                new BigDecimal("35.1679082"),
-                "070-4705-2008",
-                "부산광역시 해운대구 수영강변대로 85 (우동)",
-                null,
-                "https://tong.visitkorea.or.kr/cms/resource/37/4069137_image2_1.jpg",
-                "https://tong.visitkorea.or.kr/cms/resource/37/4069137_image3_1.jpg",
-                "APEC나루공원",
-                "16:00~07:00",
-                "8K 38,000원",
-                "부산일보사, 어반씨앤에스",
-                "070-4705-2008",
-                "㈜블렌트",
-                "070-4705-2008",
-                null,
-                null
-        );
+    private EventDetailResult buildEventDetailResult(String contentId) {
+        Event event = mock(Event.class);
+        given(event.getContentId()).willReturn(contentId);
+        given(event.getTitle()).willReturn("2026 부산나이트워크42K with dsec");
+        given(event.getEventStartDate()).willReturn(LocalDate.of(2026, 8, 29));
+        given(event.getEventEndDate()).willReturn(LocalDate.of(2026, 8, 30));
+        given(event.getMapX()).willReturn(new BigDecimal("129.1273173"));
+        given(event.getMapY()).willReturn(new BigDecimal("35.1679082"));
+        given(event.getTel()).willReturn("070-4705-2008");
+        given(event.getAddr1()).willReturn("부산광역시 해운대구 수영강변대로 85 (우동)");
+        given(event.getAddr2()).willReturn(null);
+        given(event.getFirstImage()).willReturn("https://tong.visitkorea.or.kr/cms/resource/37/4069137_image2_1.jpg");
+        given(event.getFirstImage2()).willReturn("https://tong.visitkorea.or.kr/cms/resource/37/4069137_image3_1.jpg");
+        given(event.getEventPlace()).willReturn("APEC나루공원");
+        given(event.getPlayTime()).willReturn("16:00~07:00");
+        given(event.getUseTimeFestival()).willReturn("8K 38,000원");
+        given(event.getSponsor1()).willReturn("부산일보사, 어반씨앤에스");
+        given(event.getSponsor1Tel()).willReturn("070-4705-2008");
+        given(event.getSponsor2()).willReturn("㈜블렌트");
+        given(event.getSponsor2Tel()).willReturn("070-4705-2008");
+        given(event.getAgeLimit()).willReturn(null);
+        given(event.getEventHomepage()).willReturn(null);
+        return new EventDetailResult(event);
     }
 }

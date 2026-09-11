@@ -1,10 +1,10 @@
 package com.nolleo.onna.domain.event.application.service;
 
 import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.event.application.dto.EventDetailResult;
 import com.nolleo.onna.domain.event.domain.exception.EventErrorCode;
 import com.nolleo.onna.domain.event.domain.model.Event;
 import com.nolleo.onna.domain.event.domain.repository.EventRepository;
-import com.nolleo.onna.domain.event.presentation.dto.response.EventDetailResponse;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,20 +30,20 @@ class EventQueryServiceTest {
     @InjectMocks EventQueryService eventQueryService;
 
     @Test
-    @DisplayName("활성 행사 목록을 DTO 리스트로 반환한다")
-    void getEvents_returnsActiveEventsAsDtoList() {
+    @DisplayName("활성 행사 목록을 Result 리스트로 반환한다")
+    void getEvents_returnsActiveEventsAsResultList() {
         // given
         Event mockEvent = buildMockEvent("2991394");
         given(eventRepository.findAllActive()).willReturn(List.of(mockEvent));
 
         // when
-        List<EventDetailResponse> result = eventQueryService.getEvents();
+        List<EventDetailResult> result = eventQueryService.getEvents();
 
         // then
         assertThat(result).hasSize(1);
-        assertThat(result.get(0).contentId()).isEqualTo("2991394");
-        assertThat(result.get(0).title()).isEqualTo("2026 부산나이트워크42K with dsec");
-        assertThat(result.get(0).eventPlace()).isEqualTo("APEC나루공원");
+        assertThat(result.get(0).event().getContentId()).isEqualTo("2991394");
+        assertThat(result.get(0).event().getTitle()).isEqualTo("2026 부산나이트워크42K with dsec");
+        assertThat(result.get(0).event().getEventPlace()).isEqualTo("APEC나루공원");
     }
 
     @Test
@@ -53,7 +53,7 @@ class EventQueryServiceTest {
         given(eventRepository.findAllActive()).willReturn(List.of());
 
         // when
-        List<EventDetailResponse> result = eventQueryService.getEvents();
+        List<EventDetailResult> result = eventQueryService.getEvents();
 
         // then
         assertThat(result).isEmpty();
@@ -68,16 +68,16 @@ class EventQueryServiceTest {
         given(eventRepository.findByContentId(contentId)).willReturn(Optional.of(mockEvent));
 
         // when
-        EventDetailResponse result = eventQueryService.getEventDetail(contentId);
+        EventDetailResult result = eventQueryService.getEventDetail(contentId);
 
         // then
-        assertThat(result.contentId()).isEqualTo(contentId);
-        assertThat(result.title()).isEqualTo("2026 부산나이트워크42K with dsec");
-        assertThat(result.eventStartDate()).isEqualTo(LocalDate.of(2026, 8, 29));
-        assertThat(result.eventEndDate()).isEqualTo(LocalDate.of(2026, 8, 30));
-        assertThat(result.addr1()).isEqualTo("부산광역시 해운대구 수영강변대로 85 (우동)");
-        assertThat(result.eventPlace()).isEqualTo("APEC나루공원");
-        assertThat(result.sponsor1()).isEqualTo("부산일보사, 어반씨앤에스");
+        assertThat(result.event().getContentId()).isEqualTo(contentId);
+        assertThat(result.event().getTitle()).isEqualTo("2026 부산나이트워크42K with dsec");
+        assertThat(result.event().getEventStartDate()).isEqualTo(LocalDate.of(2026, 8, 29));
+        assertThat(result.event().getEventEndDate()).isEqualTo(LocalDate.of(2026, 8, 30));
+        assertThat(result.event().getAddr1()).isEqualTo("부산광역시 해운대구 수영강변대로 85 (우동)");
+        assertThat(result.event().getEventPlace()).isEqualTo("APEC나루공원");
+        assertThat(result.event().getSponsor1()).isEqualTo("부산일보사, 어반씨앤에스");
     }
 
     @Test

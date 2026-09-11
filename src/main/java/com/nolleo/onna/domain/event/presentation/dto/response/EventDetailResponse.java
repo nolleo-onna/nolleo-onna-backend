@@ -1,5 +1,6 @@
 package com.nolleo.onna.domain.event.presentation.dto.response;
 
+import com.nolleo.onna.domain.event.application.dto.EventDetailResult;
 import com.nolleo.onna.domain.event.domain.model.Event;
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -70,7 +71,8 @@ public record EventDetailResponse(
         String eventHomepage
 
 ) {
-    public static EventDetailResponse from(Event event) {
+    public static EventDetailResponse from(EventDetailResult result) {
+        Event event = result.event();
         return new EventDetailResponse(
                 event.getContentId(),
                 event.getTitle(),
