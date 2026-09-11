@@ -21,6 +21,9 @@ public interface SpotsRepository {
     /** 주어진 content_id 목록에 해당하는 스팟을 순서 무관하게 일괄 조회 (배치 조회용). */
     List<Spot> findByIds(List<String> contentIds);
 
+    /** 주어진 content_id 목록 중 활성 스팟만 일괄 조회 — 새 참조를 만드는 쓰기 경로용 (조회 경로는 findByIds). */
+    List<Spot> findActiveByIds(List<String> contentIds);
+
     /** 활성 스팟 중 좌표 기준 거리순 조회. lclsSystm1이 null이면 카테고리 제한 없이 조회. */
     List<Spot> findNearbyByCategory(String lclsSystm1, double lat, double lon);
 

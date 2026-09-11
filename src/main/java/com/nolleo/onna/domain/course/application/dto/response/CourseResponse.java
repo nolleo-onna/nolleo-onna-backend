@@ -34,6 +34,9 @@ public record CourseResponse(
         @Schema(description = "방문 스팟 목록 (방문 순서대로)")
         List<CourseItemResponse> items,
 
+        @Schema(description = "공개 공유 상태 — 소유자 조회에서만 내려간다")
+        ShareInfoResponse share,
+
         @Schema(description = "생성 시각")
         OffsetDateTime createdAt
 
@@ -51,6 +54,7 @@ public record CourseResponse(
                 course.getDescription(),
                 course.getTotalCost(),
                 items,
+                ShareInfoResponse.from(course.getShareInfo()),
                 course.getCreatedAt()
         );
     }

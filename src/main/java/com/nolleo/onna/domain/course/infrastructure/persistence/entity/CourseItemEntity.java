@@ -56,9 +56,18 @@ public class CourseItemEntity {
     @Embedded
     private UpdateAudit updateAudit;
 
-    /** 도메인 → 엔티티 변환. 부모 참조를 설정해 양방향 연관 관계를 완성한다. */
-    public static CourseItemEntity fromDomain(CourseItem item,
-                                                        CourseEntity courseEntity) {
+    /** 도메인 → 엔티티 변환 (코스 생성 시) — 아이템 행의 생성 주체는 코스 생성 주체와 같다. */
+    public static CourseItemEntity fromDomain(CourseItem item, CourseEntity courseEntity) {
+        String courseCreatedBy = courseEntity.getCreateAudit() != null
+                ? courseEntity.getCreateAudit().getCreatedBy() : null;
+        return fromDomain(item, courseEntity, courseCreatedBy);
+    }
+
+    /**
+     * 도메인 → 엔티티 변환. 부모 참조를 설정해 양방향 연관 관계를 완성한다.
+     * createdBy는 이 행을 실제로 만든 주체다 — 코스 수정으로 다시 삽입되는 행은 편집한 사용자가 된다.
+     */
+    public static CourseItemEntity fromDomain(CourseItem item, CourseEntity courseEntity, String createdBy) {
         CourseItemEntity entity = new CourseItemEntity();
         entity.course = courseEntity;
         entity.serialNum = item.getSerialNum();
@@ -66,8 +75,7 @@ public class CourseItemEntity {
         entity.originalId = item.getPlaceRef().originalId();
         entity.expectedCost = item.getExpectedCost();
         entity.distanceFromPrevM = item.getDistanceFromPrevM();
-        entity.createAudit = CreateAudit.now(courseEntity.getCreateAudit() != null
-                ? courseEntity.getCreateAudit().getCreatedBy() : null);
+        entity.createAudit = CreateAudit.now(createdBy);
         entity.updateAudit = UpdateAudit.now();
         return entity;
     }

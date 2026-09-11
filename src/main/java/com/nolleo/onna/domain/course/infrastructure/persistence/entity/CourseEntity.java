@@ -13,6 +13,7 @@ import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.DynamicUpdate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -23,9 +24,13 @@ import java.util.UUID;
 /**
  * generated_courses 테이블과 매핑되는 JPA 엔티티.
  * 도메인 객체(Course)와 분리되며, fromDomain/toDomain으로 변환한다.
+ *
+ * {@code @DynamicUpdate}: 변경된 컬럼만 UPDATE한다. like_count·view_count처럼 벌크 쿼리로 증감하는 카운터를
+ * 코스 수정 트랜잭션이 로드 시점 값으로 덮어쓰지 않게 하기 위함이다.
  */
 @Entity
 @Table(name = "generated_courses")
+@DynamicUpdate
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CourseEntity {
@@ -114,10 +119,10 @@ public class CourseEntity {
         entity.description = course.getDescription();
         entity.intent = CourseIntentJson.toJson(course.getIntent());
         entity.totalCost = course.getTotalCost();
-        entity.isPublic = course.getShareInfo() != null && course.getShareInfo().isPublic();
-        entity.shareToken = course.getShareInfo() != null ? course.getShareInfo().shareToken() : null;
-        entity.viewCount = course.getShareInfo() != null ? course.getShareInfo().viewCount() : 0;
-        entity.likeCount = course.getShareInfo() != null ? course.getShareInfo().likeCount() : 0;
+        entity.isPublic = course.getShareInfo().isPublic();
+        entity.shareToken = course.getShareInfo().shareToken();
+        entity.viewCount = course.getShareInfo().viewCount();
+        entity.likeCount = course.getShareInfo().likeCount();
         entity.createAudit = CreateAudit.now(course.getCreatedBy());
         entity.updateAudit = UpdateAudit.now();
         entity.softDeleteAudit = SoftDeleteAudit.active();
@@ -125,6 +130,41 @@ public class CourseEntity {
                 .map(item -> CourseItemEntity.fromDomain(item, entity))
                 .forEach(entity.items::add);
         return entity;
+    }
+
+    /**
+     * 자식 아이템을 전부 컬렉션에서 떼어낸다.
+     * orphanRemoval=true라 flush 시 기존 행이 DELETE된다 — 새 아이템을 넣기 전에
+     * 호출자가 flush를 한 번 끼워 넣어야 (course_id, serial_num) UNIQUE와 충돌하지 않는다.
+     */
+    public void clearItems() {
+        items.clear();
+    }
+
+    /**
+     * 코스 편집 결과를 반영한다 — 제목 · 소개 · 재계산된 아이템 목록 · 총비용 (코스 수정의 일괄 반영 지점).
+     * clearItems() 이후에 호출하는 것을 전제로 하며, 순번은 도메인이 이미 1부터 재부여한 값이다.
+     * 공유 상태와 카운터(view_count · like_count)는 건드리지 않는다.
+     * 새로 삽입되는 아이템 행의 created_by는 코스 생성 주체가 아니라 이번 변경 주체(updatedBy)로 기록한다.
+     */
+    public void applyEdit(Course edited, String updatedBy) {
+        this.title = edited.getTitle();
+        this.description = edited.getDescription();
+        edited.getItems().forEach(item -> items.add(CourseItemEntity.fromDomain(item, this, updatedBy)));
+        this.totalCost = edited.getTotalCost();
+        if (this.updateAudit == null) this.updateAudit = UpdateAudit.now();
+        this.updateAudit.touch(updatedBy);
+    }
+
+    /**
+     * 공유 상태 전환 결과를 반영한다 — is_public · share_token 만.
+     * 제목·아이템·카운터(view_count · like_count)는 건드리지 않는다. @DynamicUpdate라 바뀐 컬럼만 UPDATE된다.
+     */
+    public void applyShareState(ShareInfo share, String updatedBy) {
+        this.isPublic = share.isPublic();
+        this.shareToken = share.shareToken();
+        if (this.updateAudit == null) this.updateAudit = UpdateAudit.now();
+        this.updateAudit.touch(updatedBy);
     }
 
     /** 엔티티 → 도메인 재구성 */

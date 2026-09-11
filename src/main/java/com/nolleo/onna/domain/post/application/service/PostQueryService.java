@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.post.application.service;
 
 import com.nolleo.onna.common.application.port.UserLookupPort;
+import com.nolleo.onna.common.application.service.ViewCountRecorder;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.post.application.dto.PostDetailResult;
 import com.nolleo.onna.domain.post.application.dto.PostPopularResult;
@@ -29,19 +30,32 @@ public class PostQueryService {
     private final PostRepository postRepository;
     private final PostLikeRepository postLikeRepository;
     private final UserLookupPort userLookupPort;
+    private final ViewCountRecorder viewCountRecorder;
 
+    /**
+     * 게시글 상세 조회. 조회는 조회수 버퍼(Redis)에 기록되고(같은 viewer는 10분에 1회만 집계),
+     * 응답 조회수는 DB 값 + 아직 DB에 반영되지 않은 대기분(이번 조회 포함)이다.
+     * 버퍼 장애 시 DB에 바로 +1 하므로(@Modifying) readOnly 트랜잭션이 아니다.
+     *
+     * 조회 기록은 다른 조회가 모두 성공한 뒤 마지막에 한다 — 뒤 단계가 실패해 롤백돼도 되돌릴 수 없는 Redis 집계만 남는 일을 막는다.
+     * Redis 호출이 트랜잭션(DB 커넥션 점유) 안에서 일어나므로 지연 상한은 spring.data.redis.timeout으로 제한한다.
+     *
+     * @param viewerKey 조회자 식별 키 (ViewerKeyResolver)
+     */
     @Transactional
-    public PostDetailResult getPost(Long postId, Long userId) {
+    public PostDetailResult getPost(Long postId, Long userId, String viewerKey) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new BusinessException(PostErrorCode.POST_NOT_FOUND));
-
-        postRepository.incrementViewCount(postId);
 
         boolean isLiked = userId != null && postLikeRepository.existsByPostIdAndUserId(postId, userId);
 
         UserLookupPort.UserProfile profile = userLookupPort.findById(post.getUserId()).orElse(null);
         String nickname = profile != null ? profile.nickname() : "알 수 없음";
         String profileImageUrl = profile != null ? profile.profileImageUrl() : null;
+
+        long pendingViews = viewCountRecorder.record(PostViewCountSink.TARGET_TYPE, postId, viewerKey,
+                () -> postRepository.incrementViewCount(postId));
+        post.applyPendingViews(pendingViews);
 
         return new PostDetailResult(post, nickname, profileImageUrl, isLiked);
     }

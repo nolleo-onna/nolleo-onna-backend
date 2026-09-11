@@ -58,4 +58,41 @@ class CourseAssemblerTest {
 
         assertThat(result.get(0).distanceFromPrevM()).isGreaterThan(Short.MAX_VALUE);
     }
+
+
+    // ── measure (코스 수정용 — 순서 유지) ─────────────────────────────────────
+
+    @Test
+    @DisplayName("measure는 assemble과 달리 입력 순서를 재배치하지 않는다")
+    void measure_keepsInputOrder() {
+        Waypoint far  = new Waypoint("far",  35.1700, 129.1400);
+        Waypoint near = new Waypoint("near", 35.1540, 129.1190);
+        Waypoint mid  = new Waypoint("mid",  35.1600, 129.1250);
+
+        List<AssembledItem> measured  = CourseAssembler.measure(START_LAT, START_LON, List.of(far, near, mid));
+        List<AssembledItem> assembled = CourseAssembler.assemble(START_LAT, START_LON, List.of(far, near, mid));
+
+        assertThat(measured).extracting(item -> item.waypoint().refId()).containsExactly("far", "near", "mid");
+        assertThat(assembled).extracting(item -> item.waypoint().refId()).containsExactly("near", "mid", "far");
+    }
+
+    @Test
+    @DisplayName("measure는 첫 지점을 시작 좌표 기준, 이후는 직전 지점 기준으로 잰다")
+    void measure_measuresFromStartThenPrevious() {
+        Waypoint a = new Waypoint("a", 35.1700, 129.1400);
+        Waypoint b = new Waypoint("b", 35.1540, 129.1190);
+
+        List<AssembledItem> result = CourseAssembler.measure(START_LAT, START_LON, List.of(a, b));
+
+        int expectedFirst  = (int) Math.round(CourseAssembler.distanceMeters(START_LAT, START_LON, a.latitude(), a.longitude()));
+        int expectedSecond = (int) Math.round(CourseAssembler.distanceMeters(a.latitude(), a.longitude(), b.latitude(), b.longitude()));
+        assertThat(result.get(0).distanceFromPrevM()).isEqualTo(expectedFirst);
+        assertThat(result.get(1).distanceFromPrevM()).isEqualTo(expectedSecond);
+    }
+
+    @Test
+    @DisplayName("measure에 빈 목록을 주면 빈 결과를 반환한다")
+    void measure_returnsEmpty_whenNoWaypoints() {
+        assertThat(CourseAssembler.measure(START_LAT, START_LON, List.of())).isEmpty();
+    }
 }

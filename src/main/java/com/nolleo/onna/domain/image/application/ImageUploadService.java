@@ -4,6 +4,7 @@ import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.common.infrastructure.s3.ImageStoragePort;
 import com.nolleo.onna.domain.image.domain.exception.ImageErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -12,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ImageUploadService {
@@ -44,6 +46,7 @@ public class ImageUploadService {
                 );
                 imageUrls.add(url);
             } catch (IOException e) {
+                log.error("업로드 파일 읽기 실패 | size={}, contentType={}", image.getSize(), image.getContentType(), e);
                 throw new BusinessException(ImageErrorCode.UPLOAD_FAILED);
             }
         }

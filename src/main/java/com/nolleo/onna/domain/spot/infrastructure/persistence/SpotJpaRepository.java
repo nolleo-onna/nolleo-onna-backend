@@ -11,6 +11,9 @@ public interface SpotJpaRepository extends JpaRepository<SpotEntity, String> {
     @Query("SELECT s FROM SpotEntity s WHERE s.active = true")
     List<SpotEntity> findAllActive();
 
+    @Query("SELECT s FROM SpotEntity s WHERE s.contentId IN :ids AND s.active = true")
+    List<SpotEntity> findActiveByIds(@Param("ids") List<String> ids);
+
     @Query(value = """
             SELECT * FROM sp_spots
             WHERE is_active = true

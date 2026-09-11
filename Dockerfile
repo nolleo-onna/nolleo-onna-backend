@@ -23,4 +23,5 @@ ENV TZ=Asia/Seoul
 COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+# exec — 셸 대신 JVM이 PID 1이 되어 docker stop의 SIGTERM을 직접 받는다 (graceful shutdown·종료 시 조회수 동기화 실행)
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
