@@ -3,6 +3,7 @@ package com.nolleo.onna.common.infrastructure.s3;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.image.domain.exception.ImageErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -12,6 +13,7 @@ import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import java.io.InputStream;
 import java.util.UUID;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class S3Uploader implements ImageStoragePort {
@@ -34,6 +36,8 @@ public class S3Uploader implements ImageStoragePort {
 
             s3Client.putObject(request, RequestBody.fromInputStream(inputStream, size));
         } catch (Exception e) {
+            log.error("이미지 스토리지 업로드 실패 | bucket={}, key={}, size={}, contentType={}",
+                    s3Properties.getBucket(), key, size, contentType, e);
             throw new BusinessException(ImageErrorCode.UPLOAD_FAILED);
         }
 
