@@ -21,6 +21,12 @@ spring:
     show-sql: false
     open-in-view: false
 
+  # 이미지 업로드 한도 — ImageUploadService(파일당 10MB, 최대 5장)와 맞춘다. 요청 한도는 10MB×5장에 multipart 오버헤드 여유분
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 55MB
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
