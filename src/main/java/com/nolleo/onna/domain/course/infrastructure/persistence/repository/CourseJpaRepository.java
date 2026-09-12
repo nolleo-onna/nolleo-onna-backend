@@ -49,6 +49,20 @@ public interface CourseJpaRepository extends JpaRepository<CourseEntity, Long> {
     @Query("UPDATE CourseEntity c SET c.viewCount = c.viewCount + 1 WHERE c.id = :id")
     void incrementViewCount(@Param("id") Long id);
 
+    /** 좋아요 수 원자 증가 — PostJpaRepository.incrementLikeCount 와 동일 패턴 */
+    @Modifying
+    @Query("UPDATE CourseEntity c SET c.likeCount = c.likeCount + 1 WHERE c.id = :id")
+    void incrementLikeCount(@Param("id") Long id);
+
+    /** 좋아요 수 원자 감소 — 0 미만으로 내려가지 않는다 (DB CHECK like_count >= 0 과 이중 방어) */
+    @Modifying
+    @Query("UPDATE CourseEntity c SET c.likeCount = c.likeCount - 1 WHERE c.id = :id AND c.likeCount > 0")
+    void decrementLikeCount(@Param("id") Long id);
+
+    /** 좋아요 수 스칼라 조회 — 벌크 UPDATE 직후 1차 캐시의 stale 엔티티를 거치지 않고 DB 값을 읽는다 */
+    @Query("SELECT c.likeCount FROM CourseEntity c WHERE c.id = :id")
+    Integer findLikeCount(@Param("id") Long id);
+
     /** 조회수 일괄 가산 — 조회수 버퍼 동기화에서 코스별로 호출한다 */
     @Modifying
     @Query("UPDATE CourseEntity c SET c.viewCount = c.viewCount + :delta WHERE c.id = :id")

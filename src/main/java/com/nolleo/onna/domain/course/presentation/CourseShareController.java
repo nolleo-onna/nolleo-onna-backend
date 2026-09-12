@@ -3,8 +3,10 @@ package com.nolleo.onna.domain.course.presentation;
 import com.nolleo.onna.common.response.ApiResponseDto;
 import com.nolleo.onna.common.security.AuthPrincipal;
 import com.nolleo.onna.common.security.ViewerKeyResolver;
+import com.nolleo.onna.domain.course.application.dto.response.CourseLikeToggleResponse;
 import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
 import com.nolleo.onna.domain.course.application.dto.response.SharedCourseResponse;
+import com.nolleo.onna.domain.course.application.service.CourseLikeService;
 import com.nolleo.onna.domain.course.application.service.CourseShareService;
 import com.nolleo.onna.domain.course.presentation.dto.request.UpdateCourseVisibilityRequest;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,6 +19,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class CourseShareController {
 
     private final CourseShareService courseShareService;
+    private final CourseLikeService courseLikeService;
 
     @PatchMapping("/{courseId}/visibility")
     @Operation(
@@ -69,7 +73,28 @@ public class CourseShareController {
             HttpServletRequest request
     ) {
         String viewerKey = ViewerKeyResolver.resolve(principal, request);
-        SharedCourseResponse data = courseShareService.getShared(shareToken, viewerKey);
+        Long viewerUserId = principal != null ? principal.userId() : null;
+        SharedCourseResponse data = courseShareService.getShared(shareToken, viewerKey, viewerUserId);
         return ApiResponseDto.success(200, "공유 코스 조회 성공", data);
+    }
+
+    @PostMapping("/shared/{shareToken}/likes/toggle")
+    @Operation(
+            summary = "공유 코스 좋아요 토글",
+            description = """
+                    공유 링크로 열람 중인 공개 코스에 좋아요를 누르거나 취소한다. 로그인이 필요하다.
+                    - 사용자당 코스 1회. 이미 눌렀으면 취소되고, 아니면 추가된다.
+                    - 코스 소유자 본인도 누를 수 있다.
+                    - 응답 likeCount는 DB에 반영된 값이며, liked는 토글 후 내 상태다.
+                    - 같은 요청이 거의 동시에 두 번 들어와도 한 번만 반영되고 두 응답 모두 반영된 상태를 돌려준다.
+                    - 토큰이 없거나 코스가 비공개·삭제된 경우 404 COURSE_NOT_FOUND. 비공개로 돌려도 기존 좋아요는 보존된다.
+                    """
+    )
+    public ResponseEntity<ApiResponseDto<CourseLikeToggleResponse>> toggleLike(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable String shareToken
+    ) {
+        CourseLikeToggleResponse data = courseLikeService.toggle(shareToken, principal.userId());
+        return ApiResponseDto.success(200, "코스 좋아요 토글 성공", data);
     }
 }

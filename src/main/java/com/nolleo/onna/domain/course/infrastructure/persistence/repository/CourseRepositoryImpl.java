@@ -82,6 +82,24 @@ public class CourseRepositoryImpl implements CourseRepository {
         jpaRepository.incrementViewCount(courseId);
     }
 
+    @Override
+    public int incrementLikeCount(Long courseId) {
+        jpaRepository.incrementLikeCount(courseId);
+        return findLikeCount(courseId);
+    }
+
+    @Override
+    public int decrementLikeCount(Long courseId) {
+        jpaRepository.decrementLikeCount(courseId);
+        return findLikeCount(courseId);
+    }
+
+    @Override
+    public int findLikeCount(Long courseId) {
+        Integer count = jpaRepository.findLikeCount(courseId);
+        return count != null ? count : 0;
+    }
+
     /** 코스별로 원자 가산 UPDATE를 실행한다 — 호출자(CourseViewCountSink)의 트랜잭션 안에서 함께 커밋된다 */
     @Override
     public void addViewCounts(Map<Long, Long> deltaByCourseId) {

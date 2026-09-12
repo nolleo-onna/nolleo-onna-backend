@@ -12,6 +12,7 @@ import com.nolleo.onna.domain.course.application.port.SpotLookupPort;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
+import com.nolleo.onna.domain.course.domain.repository.CourseLikeRepository;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.domain.service.ShareTokenGenerator;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,7 @@ public class CourseShareService {
     private final SpotLookupPort spotLookupPort;
     private final UserLookupPort userLookupPort;
     private final ViewCountRecorder viewCountRecorder;
+    private final CourseLikeRepository courseLikeRepository;
 
     public CourseResponse updateVisibility(UpdateCourseVisibilityCommand command) {
         Course course = courseRepository.findByIdForUpdate(command.courseId())
@@ -68,21 +70,23 @@ public class CourseShareService {
     }
 
     /**
-     * @param viewerKey 조회자 식별 키 — 같은 viewer의 재조회는 일정 시간 동안 조회수에 한 번만 집계된다
+     * @param viewerKey    조회자 식별 키 — 같은 viewer의 재조회는 일정 시간 동안 조회수에 한 번만 집계된다
+     * @param viewerUserId 로그인한 조회자의 회원 id, 비로그인이면 null — 있을 때만 "내가 좋아요 했는지"를 조회한다
      */
-    public SharedCourseResponse getShared(String shareToken, String viewerKey) {
+    public SharedCourseResponse getShared(String shareToken, String viewerKey, Long viewerUserId) {
         Course course = courseRepository.findPublicByShareToken(shareToken)
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.COURSE_NOT_FOUND));
 
         UserProfile author = userLookupPort.findById(course.getUserId()).orElse(null);
         Map<PlaceRef, SpotCandidate> spotByRef = loadSpots(course);
+        boolean likedByMe = viewerUserId != null && courseLikeRepository.exists(course.getId(), viewerUserId);
 
         Long courseId = course.getId();
         long pendingViews = viewCountRecorder.record(CourseViewCountSink.TARGET_TYPE, courseId, viewerKey,
                 () -> courseRepository.incrementViewCount(courseId));
         course.applyPendingViews(pendingViews);
 
-        return SharedCourseResponse.of(course, spotByRef, author);
+        return SharedCourseResponse.of(course, spotByRef, author, likedByMe);
     }
 
     /** 코스가 참조하는 스팟 상세를 한 번에 조회한다. 현재 코스는 SPOT만 담으므로 SpotLookupPort로 충분하다. */
