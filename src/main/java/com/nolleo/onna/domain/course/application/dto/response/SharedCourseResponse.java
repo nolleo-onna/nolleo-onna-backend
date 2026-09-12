@@ -45,11 +45,15 @@ public record SharedCourseResponse(
         @Schema(description = "좋아요 수", example = "7")
         int likeCount,
 
+        @Schema(description = "내가 좋아요를 눌렀는지 — 비로그인이면 항상 false", example = "false")
+        boolean likedByMe,
+
         @Schema(description = "생성 시각")
         OffsetDateTime createdAt
 
 ) {
-    public static SharedCourseResponse of(Course course, Map<PlaceRef, SpotCandidate> spotByRef, UserProfile author) {
+    public static SharedCourseResponse of(Course course, Map<PlaceRef, SpotCandidate> spotByRef,
+                                          UserProfile author, boolean likedByMe) {
         List<CourseItemResponse> items = course.getItems().stream()
                 .map(item -> CourseItemResponse.of(item, spotByRef.get(item.getPlaceRef())))
                 .toList();
@@ -63,6 +67,7 @@ public record SharedCourseResponse(
                 author != null ? author.profileImageUrl() : null,
                 course.getShareInfo().viewCount(),
                 course.getShareInfo().likeCount(),
+                likedByMe,
                 course.getCreatedAt()
         );
     }
