@@ -5,9 +5,11 @@ import com.nolleo.onna.common.security.AuthPrincipal;
 import com.nolleo.onna.common.security.jwt.JwtProvider;
 import com.nolleo.onna.domain.course.application.dto.UpdateCourseVisibilityCommand;
 import com.nolleo.onna.domain.course.application.dto.response.CourseItemResponse;
+import com.nolleo.onna.domain.course.application.dto.response.CourseLikeToggleResponse;
 import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
 import com.nolleo.onna.domain.course.application.dto.response.ShareInfoResponse;
 import com.nolleo.onna.domain.course.application.dto.response.SharedCourseResponse;
+import com.nolleo.onna.domain.course.application.service.CourseLikeService;
 import com.nolleo.onna.domain.course.application.service.CourseShareService;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.user.domain.model.UserRole;
@@ -33,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
@@ -41,6 +44,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -55,6 +59,7 @@ class CourseShareControllerTest {
 
     @Autowired MockMvc mockMvc;
     @MockBean CourseShareService courseShareService;
+    @MockBean CourseLikeService courseLikeService;
     @MockBean JwtProvider jwtProvider;
 
     private static final String TOKEN = "Qm9vay1zaGFyZS10b2tlbi1leGFtcGxl";
@@ -78,7 +83,7 @@ class CourseShareControllerTest {
     private static SharedCourseResponse sharedResponse() {
         return new SharedCourseResponse(
                 "광안리 데이트", "소개", 15000, List.of(sampleItem()),
-                "부산러버", "https://img/1.png", 43, 7, OffsetDateTime.now());
+                "부산러버", "https://img/1.png", 43, 7, false, OffsetDateTime.now());
     }
 
     // ── PATCH /courses/{courseId}/visibility ──────────────────────────────
@@ -161,7 +166,7 @@ class CourseShareControllerTest {
     @Test
     @DisplayName("GET /api/v1/courses/shared/{token} - 공개 코스를 작성자 닉네임·조회수와 함께 돌려주고 코스 id·userId·pairId·토큰은 담지 않는다")
     void getShared_returns200_withoutInternalIdentifiers() throws Exception {
-        given(courseShareService.getShared(eq(TOKEN), anyString())).willReturn(sharedResponse());
+        given(courseShareService.getShared(eq(TOKEN), anyString(), any())).willReturn(sharedResponse());
 
         mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN))
                 .andExpect(status().isOk())
@@ -181,20 +186,20 @@ class CourseShareControllerTest {
     @Test
     @DisplayName("GET /api/v1/courses/shared/{token} - 로그인 사용자는 회원 id 기반 viewer 키로 조회를 기록한다")
     void getShared_passesMemberViewerKey_whenLoggedIn() throws Exception {
-        given(courseShareService.getShared(eq(TOKEN), anyString())).willReturn(sharedResponse());
+        given(courseShareService.getShared(eq(TOKEN), anyString(), any())).willReturn(sharedResponse());
 
         mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN).with(authentication(authAs(7L))))
                 .andExpect(status().isOk());
 
         ArgumentCaptor<String> viewerKey = ArgumentCaptor.forClass(String.class);
-        verify(courseShareService).getShared(eq(TOKEN), viewerKey.capture());
+        verify(courseShareService).getShared(eq(TOKEN), viewerKey.capture(), any());
         assertThat(viewerKey.getValue()).isEqualTo("u:7");
     }
 
     @Test
     @DisplayName("GET /api/v1/courses/shared/{token} - 비로그인은 IP 해시 기반 viewer 키로 기록하고 원본 IP는 넘기지 않는다")
     void getShared_passesIpHashViewerKey_whenAnonymous() throws Exception {
-        given(courseShareService.getShared(eq(TOKEN), anyString())).willReturn(sharedResponse());
+        given(courseShareService.getShared(eq(TOKEN), anyString(), any())).willReturn(sharedResponse());
 
         mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN)
                         .with(request -> {
@@ -204,7 +209,7 @@ class CourseShareControllerTest {
                 .andExpect(status().isOk());
 
         ArgumentCaptor<String> viewerKey = ArgumentCaptor.forClass(String.class);
-        verify(courseShareService).getShared(eq(TOKEN), viewerKey.capture());
+        verify(courseShareService).getShared(eq(TOKEN), viewerKey.capture(), any());
         assertThat(viewerKey.getValue()).startsWith("ip:").hasSize(3 + 16).doesNotContain("203.0.113.9");
     }
 
@@ -212,9 +217,66 @@ class CourseShareControllerTest {
     @DisplayName("GET /api/v1/courses/shared/{token} - 없거나 비공개인 토큰은 404 COURSE_NOT_FOUND")
     void getShared_returns404_whenNotPublic() throws Exception {
         willThrow(new BusinessException(CourseErrorCode.COURSE_NOT_FOUND))
-                .given(courseShareService).getShared(eq("unknown"), anyString());
+                .given(courseShareService).getShared(eq("unknown"), anyString(), any());
 
         mockMvc.perform(get("/api/v1/courses/shared/unknown"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.errorCode").value("COURSE_NOT_FOUND"));
+    }
+
+
+    // ── likedByMe 를 위한 viewerUserId 전달 ───────────────────────────────
+
+    @Test
+    @DisplayName("GET /api/v1/courses/shared/{token} - 로그인 사용자는 회원 id를 함께 넘겨 likedByMe 를 조회하게 한다")
+    void getShared_passesViewerUserId_whenLoggedIn() throws Exception {
+        given(courseShareService.getShared(eq(TOKEN), anyString(), any())).willReturn(sharedResponse());
+
+        mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN).with(authentication(authAs(7L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.likedByMe").value(false));
+
+        verify(courseShareService).getShared(eq(TOKEN), anyString(), eq(7L));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/courses/shared/{token} - 비로그인은 회원 id 없이(null) 넘긴다")
+    void getShared_passesNullViewerUserId_whenAnonymous() throws Exception {
+        given(courseShareService.getShared(eq(TOKEN), anyString(), any())).willReturn(sharedResponse());
+
+        mockMvc.perform(get("/api/v1/courses/shared/" + TOKEN))
+                .andExpect(status().isOk());
+
+        verify(courseShareService).getShared(eq(TOKEN), anyString(), isNull());
+    }
+
+    // ── POST /courses/shared/{shareToken}/likes/toggle ───────────────────
+
+    @Test
+    @DisplayName("POST /api/v1/courses/shared/{token}/likes/toggle - JWT의 userId로 토글하고 liked·likeCount 를 돌려준다")
+    void toggleLike_returns200() throws Exception {
+        given(courseLikeService.toggle(TOKEN, 7L)).willReturn(new CourseLikeToggleResponse(true, 8));
+
+        mockMvc.perform(post("/api/v1/courses/shared/" + TOKEN + "/likes/toggle")
+                        .with(authentication(authAs(7L)))
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("코스 좋아요 토글 성공"))
+                .andExpect(jsonPath("$.data.liked").value(true))
+                .andExpect(jsonPath("$.data.likeCount").value(8));
+
+        verify(courseLikeService).toggle(TOKEN, 7L); // 본문 없이 인증 주체의 id만 쓴다
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/courses/shared/{token}/likes/toggle - 없거나 비공개인 토큰은 404 COURSE_NOT_FOUND")
+    void toggleLike_returns404_whenNotPublic() throws Exception {
+        willThrow(new BusinessException(CourseErrorCode.COURSE_NOT_FOUND))
+                .given(courseLikeService).toggle("unknown", 7L);
+
+        mockMvc.perform(post("/api/v1/courses/shared/unknown/likes/toggle")
+                        .with(authentication(authAs(7L)))
+                        .with(csrf()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.errorCode").value("COURSE_NOT_FOUND"));
     }

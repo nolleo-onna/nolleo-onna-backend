@@ -4,6 +4,7 @@ import com.nolleo.onna.common.application.port.UserLookupPort;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.comment.application.dto.CommentResult;
 import com.nolleo.onna.domain.comment.application.dto.CreateCommentCommand;
+import com.nolleo.onna.domain.comment.application.dto.UpdateCommentCommand;
 import com.nolleo.onna.domain.comment.domain.exception.CommentErrorCode;
 import com.nolleo.onna.domain.comment.domain.model.Comment;
 import com.nolleo.onna.domain.comment.domain.repository.CommentRepository;
@@ -140,6 +141,80 @@ class CommentCommandServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
                         .isEqualTo(PostErrorCode.POST_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("본인 댓글을 정상적으로 수정한다")
+    void updateComment_success() {
+        // given
+        Comment comment = Comment.restore(
+                10L, 1L, 1L, null, "원본 내용", false, OffsetDateTime.now(), null
+        );
+        given(commentRepository.findById(10L)).willReturn(Optional.of(comment));
+
+        UpdateCommentCommand command = new UpdateCommentCommand(10L, "수정된 내용");
+
+        // when
+        CommentResult result = commentCommandService.updateComment(1L, command);
+
+        // then
+        assertThat(result.content()).isEqualTo("수정된 내용");
+        verify(commentRepository, times(1)).update(any(Comment.class));
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 댓글 수정 시 COMMENT_NOT_FOUND 예외를 던진다")
+    void updateComment_throwsException_whenCommentNotFound() {
+        // given
+        given(commentRepository.findById(999L)).willReturn(Optional.empty());
+
+        UpdateCommentCommand command = new UpdateCommentCommand(999L, "수정 내용");
+
+        // when & then
+        assertThatThrownBy(() -> commentCommandService.updateComment(1L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(CommentErrorCode.COMMENT_NOT_FOUND));
+    }
+
+    @Test
+    @DisplayName("다른 사람의 댓글 수정 시 COMMENT_ACCESS_DENIED 예외를 던진다")
+    void updateComment_throwsException_whenNotOwner() {
+        // given
+        Comment comment = Comment.restore(
+                10L, 1L, 1L, null, "원본 내용", false, OffsetDateTime.now(), null
+        );
+        given(commentRepository.findById(10L)).willReturn(Optional.of(comment));
+
+        UpdateCommentCommand command = new UpdateCommentCommand(10L, "수정 내용");
+
+        // when & then — userId=2가 시도
+        assertThatThrownBy(() -> commentCommandService.updateComment(2L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(CommentErrorCode.COMMENT_ACCESS_DENIED));
+
+        verify(commentRepository, never()).update(any());
+    }
+
+    @Test
+    @DisplayName("삭제된 댓글 수정 시 COMMENT_ALREADY_DELETED 예외를 던진다")
+    void updateComment_throwsException_whenAlreadyDeleted() {
+        // given
+        Comment comment = Comment.restore(
+                10L, 1L, 1L, null, "삭제된 댓글입니다.", true, OffsetDateTime.now(), null
+        );
+        given(commentRepository.findById(10L)).willReturn(Optional.of(comment));
+
+        UpdateCommentCommand command = new UpdateCommentCommand(10L, "수정 내용");
+
+        // when & then
+        assertThatThrownBy(() -> commentCommandService.updateComment(1L, command))
+                .isInstanceOf(BusinessException.class)
+                .satisfies(ex -> assertThat(((BusinessException) ex).getErrorCode())
+                        .isEqualTo(CommentErrorCode.COMMENT_ALREADY_DELETED));
+
+        verify(commentRepository, never()).update(any());
     }
 
     @Test

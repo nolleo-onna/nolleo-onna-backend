@@ -4,9 +4,11 @@ import com.nolleo.onna.common.response.ApiResponseDto;
 import com.nolleo.onna.common.security.AuthPrincipal;
 import com.nolleo.onna.domain.comment.application.dto.CommentResult;
 import com.nolleo.onna.domain.comment.application.dto.CreateCommentCommand;
+import com.nolleo.onna.domain.comment.application.dto.UpdateCommentCommand;
 import com.nolleo.onna.domain.comment.application.service.CommentCommandService;
 import com.nolleo.onna.domain.comment.application.service.CommentQueryService;
 import com.nolleo.onna.domain.comment.presentation.dto.request.CreateCommentRequest;
+import com.nolleo.onna.domain.comment.presentation.dto.request.UpdateCommentRequest;
 import com.nolleo.onna.domain.comment.presentation.dto.response.CommentResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -37,6 +39,18 @@ public class CommentController {
                 request.postId(), request.parentCommentId(), request.content());
         CommentResult result = commentCommandService.createComment(principal.userId(), command);
         return ApiResponseDto.success(201, "댓글 작성 성공", toResponse(result));
+    }
+
+    @PatchMapping("/comments/{commentId}")
+    @Operation(summary = "댓글 수정")
+    public ResponseEntity<ApiResponseDto<CommentResponse>> updateComment(
+            @AuthenticationPrincipal AuthPrincipal principal,
+            @PathVariable Long commentId,
+            @RequestBody @Valid UpdateCommentRequest request
+    ) {
+        UpdateCommentCommand command = new UpdateCommentCommand(commentId, request.content());
+        CommentResult result = commentCommandService.updateComment(principal.userId(), command);
+        return ApiResponseDto.success(200, "댓글 수정 성공", toResponse(result));
     }
 
     @DeleteMapping("/comments/{commentId}")

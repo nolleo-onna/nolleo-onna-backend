@@ -45,6 +45,15 @@ public interface CourseRepository {
      */
     void incrementViewCount(Long courseId);
 
+    /** 좋아요 수 +1 (원자 UPDATE) 후 반영된 값을 돌려준다 — 좋아요 행이 실제로 추가됐을 때만 호출한다 */
+    int incrementLikeCount(Long courseId);
+
+    /** 좋아요 수 -1 (원자 UPDATE, 0 미만 방지) 후 반영된 값을 돌려준다 — 좋아요 행이 실제로 삭제됐을 때만 호출한다 */
+    int decrementLikeCount(Long courseId);
+
+    /** 현재 좋아요 수 — 토글이 no-op였을 때(동시 요청이 먼저 반영) 응답용 */
+    int findLikeCount(Long courseId);
+
     /** 코스 id별 조회수를 더한다 (view_count = view_count + delta) — 조회수 버퍼 동기화용, 호출자 트랜잭션 안에서 실행된다 */
     void addViewCounts(Map<Long, Long> deltaByCourseId);
 
