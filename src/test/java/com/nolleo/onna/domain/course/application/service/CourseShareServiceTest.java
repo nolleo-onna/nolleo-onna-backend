@@ -17,6 +17,7 @@ import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.GenerationMode;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.ShareInfo;
+import com.nolleo.onna.domain.course.domain.repository.CourseLikeRepository;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.domain.service.ShareTokenGenerator;
 import org.junit.jupiter.api.DisplayName;
@@ -51,6 +52,7 @@ class CourseShareServiceTest {
     @Mock SpotLookupPort spotLookupPort;
     @Mock UserLookupPort userLookupPort;
     @Mock ViewCountRecorder viewCountRecorder;
+    @Mock CourseLikeRepository courseLikeRepository;
 
     @InjectMocks CourseShareService service;
 
@@ -186,7 +188,7 @@ class CourseShareServiceTest {
         given(userLookupPort.findById(OWNER)).willReturn(Optional.of(new UserProfile("부산러버", "https://img/1.png")));
         stubSpots();
 
-        SharedCourseResponse response = service.getShared(TOKEN, VIEWER);
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER, null);
 
         assertThat(response.title()).isEqualTo("제목");
         assertThat(response.authorNickname()).isEqualTo("부산러버");
@@ -210,7 +212,7 @@ class CourseShareServiceTest {
         given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
         stubSpots();
 
-        SharedCourseResponse response = service.getShared(TOKEN, VIEWER);
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER, null);
 
         verify(courseRepository).incrementViewCount(COURSE_ID);
         assertThat(response.viewCount()).isEqualTo(43);
@@ -224,7 +226,7 @@ class CourseShareServiceTest {
         given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
         stubSpots();
 
-        SharedCourseResponse response = service.getShared(TOKEN, VIEWER);
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER, null);
 
         assertThat(response.authorNickname()).isNull();
         assertThat(response.authorProfileImageUrl()).isNull();
@@ -239,7 +241,7 @@ class CourseShareServiceTest {
         given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
         given(spotLookupPort.findByIds(List.of("A"))).willThrow(new IllegalStateException("스팟 조회 실패"));
 
-        assertThatThrownBy(() -> service.getShared(TOKEN, VIEWER))
+        assertThatThrownBy(() -> service.getShared(TOKEN, VIEWER, null))
                 .isInstanceOf(IllegalStateException.class);
         verify(viewCountRecorder, never()).record(anyString(), anyLong(), anyString(), any());
         verify(courseRepository, never()).incrementViewCount(anyLong());
@@ -250,11 +252,61 @@ class CourseShareServiceTest {
     void getShared_throws_whenNotPublicOrMissing() {
         given(courseRepository.findPublicByShareToken("unknown")).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.getShared("unknown", VIEWER))
+        assertThatThrownBy(() -> service.getShared("unknown", VIEWER, null))
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.COURSE_NOT_FOUND);
         verify(viewCountRecorder, never()).record(anyString(), anyLong(), anyString(), any());
         verify(courseRepository, never()).incrementViewCount(anyLong());
         verify(userLookupPort, never()).findById(anyLong());
+    }
+
+
+    // ── 공유 링크 조회 — likedByMe ────────────────────────────────────────
+
+    @Test
+    @DisplayName("로그인한 조회자가 이미 좋아요한 코스면 likedByMe=true")
+    void getShared_likedByMeTrue_whenViewerLiked() {
+        given(courseRepository.findPublicByShareToken(TOKEN))
+                .willReturn(Optional.of(savedCourse(OWNER, ShareInfo.of(true, TOKEN, 0, 3))));
+        given(viewCountRecorder.record(anyString(), anyLong(), anyString(), any())).willReturn(1L);
+        given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
+        given(courseLikeRepository.exists(COURSE_ID, 7L)).willReturn(true);
+        stubSpots();
+
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER, 7L);
+
+        assertThat(response.likedByMe()).isTrue();
+        assertThat(response.likeCount()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("로그인했지만 누르지 않았으면 likedByMe=false")
+    void getShared_likedByMeFalse_whenViewerNotLiked() {
+        given(courseRepository.findPublicByShareToken(TOKEN))
+                .willReturn(Optional.of(savedCourse(OWNER, ShareInfo.of(true, TOKEN, 0, 3))));
+        given(viewCountRecorder.record(anyString(), anyLong(), anyString(), any())).willReturn(1L);
+        given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
+        given(courseLikeRepository.exists(COURSE_ID, 7L)).willReturn(false);
+        stubSpots();
+
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER, 7L);
+
+        assertThat(response.likedByMe()).isFalse();
+        verify(courseLikeRepository).exists(COURSE_ID, 7L);
+    }
+
+    @Test
+    @DisplayName("비로그인 조회는 좋아요 여부를 조회하지 않고 likedByMe=false")
+    void getShared_likedByMeFalse_andSkipsLookup_whenAnonymous() {
+        given(courseRepository.findPublicByShareToken(TOKEN))
+                .willReturn(Optional.of(savedCourse(OWNER, ShareInfo.of(true, TOKEN, 0, 3))));
+        given(viewCountRecorder.record(anyString(), anyLong(), anyString(), any())).willReturn(1L);
+        given(userLookupPort.findById(OWNER)).willReturn(Optional.empty());
+        stubSpots();
+
+        SharedCourseResponse response = service.getShared(TOKEN, VIEWER, null);
+
+        assertThat(response.likedByMe()).isFalse();
+        verify(courseLikeRepository, never()).exists(anyLong(), anyLong());
     }
 }
