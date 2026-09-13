@@ -5,9 +5,12 @@ import com.nolleo.onna.common.security.AuthPrincipal;
 import com.nolleo.onna.common.security.ViewerKeyResolver;
 import com.nolleo.onna.domain.course.application.dto.response.CourseLikeToggleResponse;
 import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
+import com.nolleo.onna.domain.course.application.dto.response.PublicCourseResponse;
 import com.nolleo.onna.domain.course.application.dto.response.SharedCourseResponse;
 import com.nolleo.onna.domain.course.application.service.CourseLikeService;
+import com.nolleo.onna.domain.course.application.service.CourseQueryService;
 import com.nolleo.onna.domain.course.application.service.CourseShareService;
+import com.nolleo.onna.domain.course.domain.model.vo.CourseSort;
 import com.nolleo.onna.domain.course.presentation.dto.request.UpdateCourseVisibilityRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,7 +25,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/courses")
@@ -32,6 +38,10 @@ public class CourseShareController {
 
     private final CourseShareService courseShareService;
     private final CourseLikeService courseLikeService;
+    private final CourseQueryService courseQueryService;
+
+    /** 공개 코스 목록 페이지 크기 상한 — 게시글 목록(50)과 같은 값 */
+    static final int MAX_PUBLIC_PAGE_SIZE = 50;
 
     @PatchMapping("/{courseId}/visibility")
     @Operation(
@@ -52,6 +62,31 @@ public class CourseShareController {
     ) {
         CourseResponse data = courseShareService.updateVisibility(request.toCommand(courseId, principal.userId()));
         return ApiResponseDto.success(200, "코스 공개 상태 변경 성공", data);
+    }
+
+    @GetMapping("/popular")
+    @Operation(
+            summary = "공개 코스 목록 조회 (최신순 · 좋아요순 · 조회수순)",
+            description = """
+                    공개로 전환된 코스 목록을 조회한다. 로그인 없이 접근할 수 있다. 홈 인기 코스와 전체보기가 함께 쓴다.
+                    - sort: VIEWS(기본, 조회수순) · LIKES(좋아요순) · LATEST(최신순). 값이 같으면 최신순 → id 내림차순.
+                      대소문자를 구분하며 그 외 값은 400.
+                    - page(0부터) · size(기본 6, 최대 50)로 넘겨본다. 응답 개수가 size보다 작으면 마지막 페이지다.
+                    - 카드 클릭은 응답의 shareToken으로 GET /courses/shared/{shareToken} 에 연결한다.
+                      코스 id · userId · pairId는 담기지 않는다 — 공개 영역의 식별자는 shareToken 하나다.
+                    - viewCount는 DB 반영값이다. 조회 직후의 대기분은 최대 5분 뒤 반영된다.
+                    - 비공개·삭제된 코스는 포함되지 않는다. 탈퇴한 작성자는 닉네임·프로필이 null로 내려간다.
+                    """
+    )
+    public ResponseEntity<ApiResponseDto<List<PublicCourseResponse>>> getPublicCourses(
+            @RequestParam(defaultValue = "VIEWS") CourseSort sort,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "6") int size
+    ) {
+        int clampedPage = Math.max(page, 0);
+        int clampedSize = Math.max(1, Math.min(size, MAX_PUBLIC_PAGE_SIZE));
+        List<PublicCourseResponse> data = courseQueryService.getPublicCourses(sort, clampedPage, clampedSize);
+        return ApiResponseDto.success(200, "공개 코스 목록 조회 성공", data);
     }
 
     @GetMapping("/shared/{shareToken}")

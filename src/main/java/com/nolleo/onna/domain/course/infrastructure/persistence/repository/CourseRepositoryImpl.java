@@ -3,15 +3,21 @@ package com.nolleo.onna.domain.course.infrastructure.persistence.repository;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
+import com.nolleo.onna.domain.course.domain.model.vo.CourseSort;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.infrastructure.persistence.entity.CourseEntity;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -119,5 +125,37 @@ public class CourseRepositoryImpl implements CourseRepository {
         return jpaRepository.findByUserId(userId).stream()
                 .map(CourseEntity::toDomain)
                 .toList();
+    }
+
+    /**
+     * 2단계 조회 — (1) 정렬된 id 페이지 (2) id IN 으로 아이템까지 fetch.
+     * IN 조회는 순서를 보장하지 않으므로 (1)의 id 순서대로 다시 늘어놓는다.
+     */
+    @Override
+    public List<Course> findPublic(CourseSort sort, int page, int size) {
+        List<Long> ids = jpaRepository.findPublicIds(PageRequest.of(page, size, toSort(sort)));
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, CourseEntity> byId = jpaRepository.findWithItemsByIdIn(ids).stream()
+                .collect(Collectors.toMap(CourseEntity::getId, Function.identity()));
+        return ids.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
+                .map(CourseEntity::toDomain)
+                .toList();
+    }
+
+    /**
+     * 정렬 기준 → JPA Sort. 뒷순위를 최신순 → id 내림차순으로 고정해 같은 값끼리의 순서가
+     * 페이지마다 달라지지 않게 한다 (조회수·좋아요가 같은 코스가 많다).
+     */
+    static Sort toSort(CourseSort sort) {
+        Sort latestThenId = Sort.by(Sort.Order.desc("createAudit.createdAt"), Sort.Order.desc("id"));
+        return switch (sort) {
+            case LATEST -> latestThenId;
+            case LIKES -> Sort.by(Sort.Order.desc("likeCount")).and(latestThenId);
+            case VIEWS -> Sort.by(Sort.Order.desc("viewCount")).and(latestThenId);
+        };
     }
 }

@@ -7,11 +7,14 @@ import com.nolleo.onna.domain.course.application.dto.UpdateCourseVisibilityComma
 import com.nolleo.onna.domain.course.application.dto.response.CourseItemResponse;
 import com.nolleo.onna.domain.course.application.dto.response.CourseLikeToggleResponse;
 import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
+import com.nolleo.onna.domain.course.application.dto.response.PublicCourseResponse;
 import com.nolleo.onna.domain.course.application.dto.response.ShareInfoResponse;
 import com.nolleo.onna.domain.course.application.dto.response.SharedCourseResponse;
 import com.nolleo.onna.domain.course.application.service.CourseLikeService;
+import com.nolleo.onna.domain.course.application.service.CourseQueryService;
 import com.nolleo.onna.domain.course.application.service.CourseShareService;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
+import com.nolleo.onna.domain.course.domain.model.vo.CourseSort;
 import com.nolleo.onna.domain.user.domain.model.UserRole;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,6 +36,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -50,8 +54,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 컨트롤러 슬라이스 — 요청 매핑 · 검증 · 오류 변환만 본다.
- * SecurityConfig는 이 슬라이스에 로드되지 않으므로 permitAll(비로그인 공유 조회)은 여기서 검증할 수 없다.
- * 그 규칙은 개발서버에서 토큰 없이 GET /api/v1/courses/shared/{token} 을 호출해 확인한다.
+ * SecurityConfig는 이 슬라이스에 로드되지 않으므로 permitAll(비로그인 공유 조회 · 공개 코스 목록)은 여기서 검증할 수 없다.
+ * 그 규칙은 개발서버에서 토큰 없이 GET /api/v1/courses/shared/{token} · GET /api/v1/courses/popular 를 호출해 확인한다.
  */
 @WebMvcTest(CourseShareController.class)
 @WithMockUser
@@ -60,6 +64,7 @@ class CourseShareControllerTest {
     @Autowired MockMvc mockMvc;
     @MockBean CourseShareService courseShareService;
     @MockBean CourseLikeService courseLikeService;
+    @MockBean CourseQueryService courseQueryService;
     @MockBean JwtProvider jwtProvider;
 
     private static final String TOKEN = "Qm9vay1zaGFyZS10b2tlbi1leGFtcGxl";
@@ -224,6 +229,84 @@ class CourseShareControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("COURSE_NOT_FOUND"));
     }
 
+
+    // ── GET /courses/popular ──────────────────────────────────────────────
+
+    private static PublicCourseResponse publicCard(String token) {
+        return new PublicCourseResponse(token, "광안리 데이트", "소개", 15000, List.of("광안리해수욕장", "OO카페"),
+                "https://img/a.jpg", "부산러버", "https://img/1.png", 42, 7, OffsetDateTime.now());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/courses/popular - 기본값 sort=VIEWS·page=0·size=6 으로 조회하고 카드 목록을 돌려준다")
+    void getPublicCourses_returns200_withDefaults() throws Exception {
+        given(courseQueryService.getPublicCourses(CourseSort.VIEWS, 0, 6)).willReturn(List.of(publicCard(TOKEN)));
+
+        mockMvc.perform(get("/api/v1/courses/popular"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("공개 코스 목록 조회 성공"))
+                .andExpect(jsonPath("$.data.length()").value(1))
+                .andExpect(jsonPath("$.data[0].shareToken").value(TOKEN))
+                .andExpect(jsonPath("$.data[0].title").value("광안리 데이트"))
+                .andExpect(jsonPath("$.data[0].spotTitles[0]").value("광안리해수욕장"))
+                .andExpect(jsonPath("$.data[0].thumbnailImageUrl").value("https://img/a.jpg"))
+                .andExpect(jsonPath("$.data[0].authorNickname").value("부산러버"))
+                .andExpect(jsonPath("$.data[0].viewCount").value(42))
+                .andExpect(jsonPath("$.data[0].likeCount").value(7))
+                .andExpect(jsonPath("$.data[0].id").doesNotExist())
+                .andExpect(jsonPath("$.data[0].userId").doesNotExist())
+                .andExpect(jsonPath("$.data[0].pairId").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/courses/popular - sort=LATEST·LIKES 를 그대로 넘긴다 (전체보기 정렬 탭)")
+    void getPublicCourses_passesSort() throws Exception {
+        given(courseQueryService.getPublicCourses(any(), eq(0), eq(9))).willReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/courses/popular").param("sort", "LATEST").param("size", "9"))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/courses/popular").param("sort", "LIKES").param("size", "9"))
+                .andExpect(status().isOk());
+
+        verify(courseQueryService).getPublicCourses(CourseSort.LATEST, 0, 9);
+        verify(courseQueryService).getPublicCourses(CourseSort.LIKES, 0, 9);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/courses/popular - 정의되지 않은 sort 값은 400")
+    void getPublicCourses_returns400_whenSortUnknown() throws Exception {
+        mockMvc.perform(get("/api/v1/courses/popular").param("sort", "random"))
+                .andExpect(status().isBadRequest());
+
+        verify(courseQueryService, never()).getPublicCourses(any(), anyInt(), anyInt());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/courses/popular - page·size 를 그대로 넘기고, size 는 50 을 넘지 않는다")
+    void getPublicCourses_passesPaging_andClampsSize() throws Exception {
+        given(courseQueryService.getPublicCourses(CourseSort.VIEWS, 2, 9)).willReturn(List.of());
+        given(courseQueryService.getPublicCourses(CourseSort.VIEWS, 0, 50)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/courses/popular").param("page", "2").param("size", "9"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.length()").value(0));
+        verify(courseQueryService).getPublicCourses(CourseSort.VIEWS, 2, 9);
+
+        mockMvc.perform(get("/api/v1/courses/popular").param("size", "500"))
+                .andExpect(status().isOk());
+        verify(courseQueryService).getPublicCourses(CourseSort.VIEWS, 0, 50);
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/courses/popular - 음수 page 와 0 이하 size 는 각각 0·1 로 보정한다")
+    void getPublicCourses_normalizesInvalidPaging() throws Exception {
+        given(courseQueryService.getPublicCourses(CourseSort.VIEWS, 0, 1)).willReturn(List.of());
+
+        mockMvc.perform(get("/api/v1/courses/popular").param("page", "-3").param("size", "0"))
+                .andExpect(status().isOk());
+
+        verify(courseQueryService).getPublicCourses(CourseSort.VIEWS, 0, 1);
+    }
 
     // ── likedByMe 를 위한 viewerUserId 전달 ───────────────────────────────
 
