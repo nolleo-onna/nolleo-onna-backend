@@ -13,11 +13,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 공개 코스 목록 카드 — 홈 인기 코스 · 공개 코스 둘러보기. 로그인 없이 내려간다.
+ * 공개 코스 목록 카드 — 홈 인기 코스 · 공개 코스 전체보기. 로그인 없이 내려간다.
  * 공개 영역의 식별자는 shareToken 하나다. 코스 id · userId · pairId는 SharedCourseResponse와 같은 이유로 담지 않는다.
  */
 @Schema(description = "공개 코스 목록 카드 — 카드 클릭은 shareToken으로 공유 페이지에 연결한다")
-public record PopularCourseResponse(
+public record PublicCourseResponse(
 
         @Schema(description = "공유 링크 토큰 — GET /courses/shared/{shareToken} 에 사용",
                 example = "Qm9vay1zaGFyZS10b2tlbi1leGFtcGxl")
@@ -54,7 +54,7 @@ public record PopularCourseResponse(
         OffsetDateTime createdAt
 
 ) {
-    public static PopularCourseResponse of(Course course, Map<PlaceRef, SpotCandidate> spotByRef, UserProfile author) {
+    public static PublicCourseResponse of(Course course, Map<PlaceRef, SpotCandidate> spotByRef, UserProfile author) {
         List<SpotCandidate> spots = course.getItems().stream()
                 .map(CourseItem::getPlaceRef)
                 .map(spotByRef::get)
@@ -71,7 +71,7 @@ public record PopularCourseResponse(
                 .findFirst()
                 .orElse(null);
 
-        return new PopularCourseResponse(
+        return new PublicCourseResponse(
                 course.getShareInfo().shareToken(),
                 course.getTitle(),
                 course.getDescription(),

@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.course.domain.repository;
 
 import com.nolleo.onna.domain.course.domain.model.Course;
+import com.nolleo.onna.domain.course.domain.model.vo.CourseSort;
 
 import java.util.List;
 import java.util.Map;
@@ -62,11 +63,12 @@ public interface CourseRepository {
     List<Course> findByUserId(Long userId);
 
     /**
-     * 공개 코스 목록 — 인기순(조회수 내림차순 → 최신순). 비공개·삭제된 코스는 제외한다.
-     * 공개 영역(홈 인기 코스 · 공개 코스 둘러보기)용이라 소유자 검증이 없다.
+     * 공개 코스 목록 — 정렬 기준(최신순 · 좋아요순 · 조회수순)으로 페이지 조회. 비공개·삭제된 코스는 제외한다.
+     * 공개 영역(홈 인기 코스 · 공개 코스 전체보기)용이라 소유자 검증이 없다.
+     * 값이 같을 때의 뒷순위는 최신순 → id 내림차순으로 고정해 페이지 경계에서 순서가 흔들리지 않게 한다.
      *
      * @param page 0부터 시작하는 페이지 번호
      * @param size 페이지 크기 — 상한은 호출자(컨트롤러)가 잡는다
      */
-    List<Course> findPublicOrderByPopularity(int page, int size);
+    List<Course> findPublic(CourseSort sort, int page, int size);
 }

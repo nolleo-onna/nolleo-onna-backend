@@ -47,7 +47,7 @@ public interface CourseJpaRepository extends JpaRepository<CourseEntity, Long> {
     Optional<CourseEntity> findPublicByShareToken(@Param("shareToken") String shareToken);
 
     /**
-     * 공개 코스 id 페이지 — 인기순(조회수 내림차순 → 최신순 → id 내림차순으로 순서 고정).
+     * 공개 코스 id 페이지 — 정렬은 Pageable의 Sort로 붙는다 (CourseRepositoryImpl이 CourseSort → Sort로 변환).
      * 아이템 fetch join과 LIMIT을 한 쿼리에 섞으면 Hibernate가 전체를 메모리로 읽어 자르므로(HHH90003004),
      * id만 페이징한 뒤 findWithItemsByIdIn 으로 본문을 가져오는 2단계로 나눈다.
      */
@@ -55,9 +55,8 @@ public interface CourseJpaRepository extends JpaRepository<CourseEntity, Long> {
             SELECT c.id FROM CourseEntity c
              WHERE c.isPublic = true
                AND c.softDeleteAudit.deletedAt IS NULL
-             ORDER BY c.viewCount DESC, c.createAudit.createdAt DESC, c.id DESC
             """)
-    List<Long> findPublicIdsOrderByPopularity(Pageable pageable);
+    List<Long> findPublicIds(Pageable pageable);
 
     /** id 목록으로 코스 + 아이템 일괄 조회 — 순서는 보장하지 않으므로 호출자가 id 순서대로 다시 정렬한다 */
     @EntityGraph(attributePaths = "items")

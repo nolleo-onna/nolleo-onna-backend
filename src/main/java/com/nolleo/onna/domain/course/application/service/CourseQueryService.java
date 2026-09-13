@@ -6,10 +6,11 @@ import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
 import com.nolleo.onna.domain.course.application.dto.response.CourseSummaryResponse;
-import com.nolleo.onna.domain.course.application.dto.response.PopularCourseResponse;
+import com.nolleo.onna.domain.course.application.dto.response.PublicCourseResponse;
 import com.nolleo.onna.domain.course.application.port.SpotLookupPort;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
+import com.nolleo.onna.domain.course.domain.model.vo.CourseSort;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import lombok.RequiredArgsConstructor;
@@ -57,12 +58,12 @@ public class CourseQueryService {
     }
 
     /**
-     * 공개 코스 목록 — 인기순(조회수 → 최신순). 로그인 없이 볼 수 있어 소유자 검증이 없다.
+     * 공개 코스 목록 — 최신순 · 좋아요순 · 조회수순. 로그인 없이 볼 수 있어 소유자 검증이 없다.
      * 작성자 프로필은 id 묶음으로 한 번에 조회한다(N+1 방지). 탈퇴한 작성자는 null로 내려간다.
      * 조회수는 DB 반영값이다 — 단건 공유 조회와 달리 버퍼 대기분을 더하지 않는다(목록에서 코스마다 Redis를 읽지 않는다).
      */
-    public List<PopularCourseResponse> getPopular(int page, int size) {
-        List<Course> courses = courseRepository.findPublicOrderByPopularity(page, size);
+    public List<PublicCourseResponse> getPublicCourses(CourseSort sort, int page, int size) {
+        List<Course> courses = courseRepository.findPublic(sort, page, size);
         if (courses.isEmpty()) {
             return List.of();
         }
@@ -71,7 +72,7 @@ public class CourseQueryService {
         Map<Long, UserProfile> authorById = userLookupPort.findByIds(authorIds);
 
         return courses.stream()
-                .map(course -> PopularCourseResponse.of(course, spotByRef, authorById.get(course.getUserId())))
+                .map(course -> PublicCourseResponse.of(course, spotByRef, authorById.get(course.getUserId())))
                 .toList();
     }
 
