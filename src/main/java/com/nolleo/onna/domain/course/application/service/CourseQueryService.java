@@ -1,9 +1,12 @@
 package com.nolleo.onna.domain.course.application.service;
 
+import com.nolleo.onna.common.application.port.UserLookupPort;
+import com.nolleo.onna.common.application.port.UserLookupPort.UserProfile;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.dto.response.CourseResponse;
 import com.nolleo.onna.domain.course.application.dto.response.CourseSummaryResponse;
+import com.nolleo.onna.domain.course.application.dto.response.PopularCourseResponse;
 import com.nolleo.onna.domain.course.application.port.SpotLookupPort;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
@@ -19,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +31,7 @@ public class CourseQueryService {
 
     private final CourseRepository courseRepository;
     private final SpotLookupPort spotLookupPort;
+    private final UserLookupPort userLookupPort;
 
     /**
      * pairId로 묶인 코스(들)을 방문 스팟 상세 정보와 함께 조회한다.
@@ -48,6 +53,25 @@ public class CourseQueryService {
 
         return courses.stream()
                 .map(course -> CourseSummaryResponse.of(course, spotByRef))
+                .toList();
+    }
+
+    /**
+     * 공개 코스 목록 — 인기순(조회수 → 최신순). 로그인 없이 볼 수 있어 소유자 검증이 없다.
+     * 작성자 프로필은 id 묶음으로 한 번에 조회한다(N+1 방지). 탈퇴한 작성자는 null로 내려간다.
+     * 조회수는 DB 반영값이다 — 단건 공유 조회와 달리 버퍼 대기분을 더하지 않는다(목록에서 코스마다 Redis를 읽지 않는다).
+     */
+    public List<PopularCourseResponse> getPopular(int page, int size) {
+        List<Course> courses = courseRepository.findPublicOrderByPopularity(page, size);
+        if (courses.isEmpty()) {
+            return List.of();
+        }
+        Map<PlaceRef, SpotCandidate> spotByRef = loadSpots(courses);
+        Set<Long> authorIds = courses.stream().map(Course::getUserId).collect(Collectors.toSet());
+        Map<Long, UserProfile> authorById = userLookupPort.findByIds(authorIds);
+
+        return courses.stream()
+                .map(course -> PopularCourseResponse.of(course, spotByRef, authorById.get(course.getUserId())))
                 .toList();
     }
 

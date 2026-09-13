@@ -60,4 +60,13 @@ public interface CourseRepository {
     List<Course> findByPairId(UUID pairId);
 
     List<Course> findByUserId(Long userId);
+
+    /**
+     * 공개 코스 목록 — 인기순(조회수 내림차순 → 최신순). 비공개·삭제된 코스는 제외한다.
+     * 공개 영역(홈 인기 코스 · 공개 코스 둘러보기)용이라 소유자 검증이 없다.
+     *
+     * @param page 0부터 시작하는 페이지 번호
+     * @param size 페이지 크기 — 상한은 호출자(컨트롤러)가 잡는다
+     */
+    List<Course> findPublicOrderByPopularity(int page, int size);
 }

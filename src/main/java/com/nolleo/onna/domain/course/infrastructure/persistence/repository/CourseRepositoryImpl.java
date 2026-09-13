@@ -6,12 +6,16 @@ import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.infrastructure.persistence.entity.CourseEntity;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -117,6 +121,25 @@ public class CourseRepositoryImpl implements CourseRepository {
     @Override
     public List<Course> findByUserId(Long userId) {
         return jpaRepository.findByUserId(userId).stream()
+                .map(CourseEntity::toDomain)
+                .toList();
+    }
+
+    /**
+     * 2단계 조회 — (1) 인기순 id 페이지 (2) id IN 으로 아이템까지 fetch.
+     * IN 조회는 순서를 보장하지 않으므로 (1)의 id 순서대로 다시 늘어놓는다.
+     */
+    @Override
+    public List<Course> findPublicOrderByPopularity(int page, int size) {
+        List<Long> ids = jpaRepository.findPublicIdsOrderByPopularity(PageRequest.of(page, size));
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        Map<Long, CourseEntity> byId = jpaRepository.findWithItemsByIdIn(ids).stream()
+                .collect(Collectors.toMap(CourseEntity::getId, Function.identity()));
+        return ids.stream()
+                .map(byId::get)
+                .filter(Objects::nonNull)
                 .map(CourseEntity::toDomain)
                 .toList();
     }
