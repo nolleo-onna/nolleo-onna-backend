@@ -30,11 +30,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -43,12 +45,21 @@ class CourseGenerationServiceTest {
 
     @Mock SpotLookupPort spotLookupPort;
     @Mock SpotReranker spotReranker;
+    @Mock SpotReranker.Ranker ranker;
     @Mock CourseContentWriter courseContentWriter;
     @Mock CourseRepository courseRepository;
 
     @InjectMocks CourseGenerationService service;
 
     // 픽스처 — 광안리 중심(35.1531, 129.1187) 기준. SpotCandidate는 mapX=경도, mapY=위도.
+
+    private static final double GWANGAN_LAT = 35.1531;
+    private static final double GWANGAN_LON = 129.1187;
+    private static final int POOL_SIZE = 20;
+
+    /** 서비스가 그룹별로 묶어 조회하는 카테고리 목록 — 포트 호출 인자와 정확히 일치해야 한다 */
+    private static final List<String> FOOD_GROUP = List.of("FD");
+    private static final List<String> ATTRACTION_GROUP = List.of("NA", "HS", "VE");
 
     private static SpotCandidate spot(String id, String category, double lat, double lon) {
         return new SpotCandidate(id, id + "명", null, category, category,
@@ -62,7 +73,12 @@ class CourseGenerationServiceTest {
 
     /** 슬롯을 명시해 그룹별 호출을 통제한다. attraction/activity가 0이면 해당 그룹은 조회조차 하지 않는다. */
     private static CourseIntent intent(int food, int attraction, List<String> mood, String companion) {
-        return new CourseIntent("광안리", false, null, companion, mood,
+        return intent(food, attraction, mood, companion, false);
+    }
+
+    private static CourseIntent intent(int food, int attraction, List<String> mood, String companion,
+                                       boolean nearbyAllowed) {
+        return new CourseIntent("광안리", nearbyAllowed, null, companion, mood,
                 new SlotHints(food, 0, attraction, 0), false);
     }
 
@@ -75,18 +91,22 @@ class CourseGenerationServiceTest {
                 .willReturn(new CourseContent("생성된 제목", "생성된 소개"));
     }
 
-    private void stubAttractionPools(List<SpotCandidate> na) {
-        given(spotLookupPort.findNearbyByCategory(eq("NA"), anyDouble(), anyDouble())).willReturn(na);
-        given(spotLookupPort.findNearbyByCategory(eq("HS"), anyDouble(), anyDouble())).willReturn(List.of());
-        given(spotLookupPort.findNearbyByCategory(eq("VE"), anyDouble(), anyDouble())).willReturn(List.of());
+    private void stubFoodPool(List<SpotCandidate> pool) {
+        given(spotLookupPort.findNearbyByCategories(eq(FOOD_GROUP), anyDouble(), anyDouble(), anyDouble(), anyInt()))
+                .willReturn(pool);
+    }
+
+    private void stubAttractionPool(List<SpotCandidate> pool) {
+        given(spotLookupPort.findNearbyByCategories(eq(ATTRACTION_GROUP), anyDouble(), anyDouble(), anyDouble(), anyInt()))
+                .willReturn(pool);
     }
 
     @Test
     @DisplayName("스팟을 최근접 순으로 조립해 SPOT 참조 아이템으로 저장하고, FD만 가격을 붙여 총비용을 계산한다")
     void generate_assemblesAndSaves() {
         // given
-        given(spotLookupPort.findNearbyByCategory(eq("FD"), anyDouble(), anyDouble())).willReturn(List.of(FOOD_NEAR));
-        stubAttractionPools(List.of(NATURE));
+        stubFoodPool(List.of(FOOD_NEAR));
+        stubAttractionPool(List.of(NATURE));
         given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of("food1", 12000));
         stubContent();
         stubSaveReturnsArgument();
@@ -118,7 +138,8 @@ class CourseGenerationServiceTest {
 
         // 제목 생성에는 방문 순서대로의 스팟명이 전달된다
         verify(courseContentWriter).generate(any(CourseIntent.class), eq(List.of("food1명", "nature1명")));
-        verify(spotReranker, never()).rerank(anyString(), anyList());
+        // mood·companion이 없으면 임베딩(리랭킹 준비)을 하지 않는다
+        verify(spotReranker, never()).prepare(anyString());
     }
 
     @Test
@@ -130,15 +151,66 @@ class CourseGenerationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.UNKNOWN_START_AREA);
 
-        verifyNoInteractions(spotLookupPort, courseRepository, courseContentWriter);
+        verifyNoInteractions(spotLookupPort, spotReranker, courseRepository, courseContentWriter);
+    }
+
+    @Test
+    @DisplayName("후보 조회는 시작 지역 중심 좌표·기본 반경·풀 크기를 그대로 포트에 넘긴다 (정렬·절단은 DB 책임)")
+    void generate_queriesWithCenterDefaultRadiusAndPoolSize() {
+        // given
+        stubFoodPool(List.of(FOOD_NEAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        service.generate(1L, intent(1, 0, List.of(), null), "AI_CHAT");
+
+        // then
+        verify(spotLookupPort).findNearbyByCategories(
+                FOOD_GROUP, GWANGAN_LAT, GWANGAN_LON, CourseGenerationService.SEARCH_RADIUS_M, POOL_SIZE);
+    }
+
+    @Test
+    @DisplayName("nearbyAllowed(근처도 괜찮아)면 넓은 반경으로 후보를 조회한다")
+    void generate_widensRadius_whenNearbyAllowed() {
+        // given
+        stubFoodPool(List.of(FOOD_NEAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        service.generate(1L, intent(1, 0, List.of(), null, true), "AI_CHAT");
+
+        // then
+        verify(spotLookupPort).findNearbyByCategories(
+                FOOD_GROUP, GWANGAN_LAT, GWANGAN_LON, CourseGenerationService.NEARBY_SEARCH_RADIUS_M, POOL_SIZE);
+    }
+
+    @Test
+    @DisplayName("리랭킹이 없으면 후보 풀의 순서(DB 거리순)를 그대로 신뢰해 앞에서부터 고른다 — 서비스가 다시 정렬하지 않는다")
+    void generate_keepsPoolOrder_whenNoRerank() {
+        // given — 포트가 준 순서는 [food2, food1]. 좌표상으로는 food1이 더 가깝지만 서비스는 순서를 바꾸지 않는다
+        stubFoodPool(List.of(FOOD_FAR, FOOD_NEAR));
+        given(spotLookupPort.findFoodPrices(List.of("food2"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intent(1, 0, List.of(), null), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food2"));
     }
 
     @Test
     @DisplayName("mood나 companion이 있으면 벡터 리랭킹 순서로 후보를 고른다 — 거리순 1위가 아니라 리랭킹 1위가 선택된다")
     void generate_usesRerankOrder_whenMoodPresent() {
         // given — 거리순 풀은 [food1, food2], 리랭킹이 food2를 앞세움
-        given(spotLookupPort.findNearbyByCategory(eq("FD"), anyDouble(), anyDouble())).willReturn(List.of(FOOD_NEAR, FOOD_FAR));
-        given(spotReranker.rerank(eq("로맨틱 연인 여행"), eq(List.of("food1", "food2")))).willReturn(List.of("food2", "food1"));
+        stubFoodPool(List.of(FOOD_NEAR, FOOD_FAR));
+        given(spotReranker.prepare("로맨틱 연인 여행")).willReturn(ranker);
+        given(ranker.rerank(List.of("food1", "food2"))).willReturn(List.of("food2", "food1"));
         given(spotLookupPort.findFoodPrices(List.of("food2"))).willReturn(Map.of());
         stubContent();
         stubSaveReturnsArgument();
@@ -152,10 +224,31 @@ class CourseGenerationServiceTest {
     }
 
     @Test
+    @DisplayName("리랭킹 준비(임베딩)는 생성 1회당 1번만 하고, 같은 랭커를 카테고리 그룹마다 재사용한다")
+    void generate_preparesRerankerOnce_andReusesAcrossGroups() {
+        // given — FD 그룹과 관광 그룹 둘 다 리랭킹 대상
+        stubFoodPool(List.of(FOOD_NEAR));
+        stubAttractionPool(List.of(NATURE));
+        given(spotReranker.prepare(anyString())).willReturn(ranker);
+        given(ranker.rerank(anyList())).willAnswer(inv -> inv.getArgument(0));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        service.generate(1L, intent(1, 1, List.of("감성적인"), null), "AI_CHAT");
+
+        // then
+        verify(spotReranker, times(1)).prepare("감성적인");
+        verify(ranker).rerank(List.of("food1"));
+        verify(ranker).rerank(List.of("nature1"));
+    }
+
+    @Test
     @DisplayName("좌표가 없는 스팟은 후보에서 제외되어 코스에 담기지 않는다")
     void generate_excludesSpotWithoutCoordinate() {
         // given — 2개를 요청했지만 유효 좌표는 1개뿐
-        given(spotLookupPort.findNearbyByCategory(eq("FD"), anyDouble(), anyDouble())).willReturn(List.of(NO_COORD, FOOD_NEAR));
+        stubFoodPool(List.of(NO_COORD, FOOD_NEAR));
         given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of());
         stubContent();
         stubSaveReturnsArgument();
@@ -173,8 +266,8 @@ class CourseGenerationServiceTest {
         // given — FD와 NA 풀에 같은 contentId
         SpotCandidate asFood = spot("dup", "FD", 35.1540, 129.1190);
         SpotCandidate asNature = spot("dup", "NA", 35.1540, 129.1190);
-        given(spotLookupPort.findNearbyByCategory(eq("FD"), anyDouble(), anyDouble())).willReturn(List.of(asFood));
-        stubAttractionPools(List.of(asNature));
+        stubFoodPool(List.of(asFood));
+        stubAttractionPool(List.of(asNature));
         given(spotLookupPort.findFoodPrices(List.of("dup"))).willReturn(Map.of());
         stubContent();
         stubSaveReturnsArgument();
@@ -191,8 +284,8 @@ class CourseGenerationServiceTest {
     @DisplayName("가격 조회는 FD 카테고리 아이템의 contentId만으로 호출한다")
     void generate_queriesPricesOnlyForFood() {
         // given
-        given(spotLookupPort.findNearbyByCategory(eq("FD"), anyDouble(), anyDouble())).willReturn(List.of(FOOD_NEAR));
-        stubAttractionPools(List.of(NATURE));
+        stubFoodPool(List.of(FOOD_NEAR));
+        stubAttractionPool(List.of(NATURE));
         given(spotLookupPort.findFoodPrices(anyList())).willReturn(Map.of());
         stubContent();
         stubSaveReturnsArgument();

@@ -30,8 +30,9 @@ public class SpotLookupAdapter implements SpotLookupPort {
     private final SpotPriceSummaryRepository spotPriceSummaryRepository;
 
     @Override
-    public List<SpotCandidate> findNearbyByCategory(String categoryCode, double lat, double lon) {
-        return spotsRepository.findNearbyByCategory(categoryCode, lat, lon).stream()
+    public List<SpotCandidate> findNearbyByCategories(List<String> categoryCodes, double lat, double lon,
+                                                      double radiusM, int limit) {
+        return spotsRepository.findNearbyByCategories(categoryCodes, lat, lon, radiusM, limit).stream()
                 .map(SpotLookupAdapter::toCandidate)
                 .toList();
     }
