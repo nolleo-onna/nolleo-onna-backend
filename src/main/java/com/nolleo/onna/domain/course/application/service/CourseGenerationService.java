@@ -18,8 +18,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,12 +30,16 @@ import java.util.UUID;
  * 순서:
  *   1. 시작 지역 좌표 확정 (DistrictCenter)
  *   2. SlotHints → SlotPlan (카테고리별 목표 개수)
- *   3. 카테고리 그룹별 후보 풀 조회 (거리순, SpotLookupPort)
- *   4. mood/companion이 있으면 벡터 유사도로 후보 풀 재정렬, 없으면 거리순 그대로 상위 N개 선택
+ *   3. 카테고리 그룹별 후보 풀 조회 (SpotLookupPort) — 검색 반경(nearbyAllowed) 안에서 가까운 순
+ *      상위 CANDIDATE_POOL_SIZE개. 정렬·절단은 DB(PostGIS KNN)가 끝내므로 여기서 다시 정렬하지 않는다.
+ *   4. mood/companion이 있으면 벡터 유사도로 후보 풀 재정렬, 없으면 거리순 그대로 상위 N개 선택.
+ *      쿼리 텍스트는 그룹마다 같으므로 임베딩(SpotReranker.prepare)은 요청당 1회만 한다.
  *   5. 최근접 탐욕 순서로 코스 조립 (CourseAssembler)
  *   6. FD 카테고리 아이템만 가격 조회 (SpotLookupPort)
  *   7. 조립 완료 후 제목·소개 생성 (CourseContentWriter)
  *   8. 저장
+ *
+ * intent.budget은 스냅샷으로 저장만 하고 후보 선택·가격 필터에는 아직 반영하지 않는다 (#71에서 미반영으로 결정).
  *
  * Spot 컨텍스트에는 SpotLookupPort/SpotReranker 포트로만 접근한다 —
  * Spot의 도메인 모델(Spot/SpotCategory/GeoCoordinate)을 이 클래스가 직접 알지 않는다.
@@ -58,7 +60,14 @@ public class CourseGenerationService {
     private static final List<String> ATTRACTION_CATEGORIES = List.of("NA", "HS", "VE");
     private static final List<String> ACTIVITY_CATEGORIES = List.of("EX", "LS");
     private static final String FOOD_CATEGORY = "FD";
+    /** 그룹당 후보 풀 크기 — DB가 가까운 순으로 이만큼만 잘라서 준다 */
     private static final int CANDIDATE_POOL_SIZE = 20;
+
+    /** 후보 검색 반경(미터) — 시작 지역 중심 기준. 지역명만 말하면 그 지역 안에서 고른다 */
+    static final double SEARCH_RADIUS_M = 5_000;
+
+    /** "근처도 괜찮아"(nearbyAllowed)일 때의 검색 반경(미터) — 인접 지역까지 넓힌다 */
+    static final double NEARBY_SEARCH_RADIUS_M = 15_000;
 
     private final SpotLookupPort spotLookupPort;
     private final SpotReranker spotReranker;
@@ -72,12 +81,16 @@ public class CourseGenerationService {
         double lon = center.getLongitude();
 
         SlotPlan plan = SlotPlanner.plan(intent.slotHints());
+        double radiusM = intent.nearbyAllowed() ? NEARBY_SEARCH_RADIUS_M : SEARCH_RADIUS_M;
+
+        // 무드·동행 쿼리는 그룹마다 같으므로 임베딩은 여기서 한 번만 한다 — 그룹마다 하면 같은 텍스트로 API를 3번 부른다
         String queryText = buildRerankQueryText(intent);
+        SpotReranker.Ranker ranker = queryText != null ? spotReranker.prepare(queryText) : null;
 
         Map<String, SpotCandidate> selected = new LinkedHashMap<>();
-        selectGroup(List.of(FOOD_CATEGORY), plan.foodCount() + plan.cafeCount(), lat, lon, queryText, selected);
-        selectGroup(ATTRACTION_CATEGORIES, plan.attractionCount(), lat, lon, queryText, selected);
-        selectGroup(ACTIVITY_CATEGORIES, plan.activityCount(), lat, lon, queryText, selected);
+        selectGroup(List.of(FOOD_CATEGORY), plan.foodCount() + plan.cafeCount(), lat, lon, radiusM, ranker, selected);
+        selectGroup(ATTRACTION_CATEGORIES, plan.attractionCount(), lat, lon, radiusM, ranker, selected);
+        selectGroup(ACTIVITY_CATEGORIES, plan.activityCount(), lat, lon, radiusM, ranker, selected);
 
         // SpotCandidate → Course 컨텍스트의 Waypoint VO 변환 (좌표 없는 스팟은 제외)
         List<CourseAssembler.Waypoint> waypoints = selected.values().stream()
@@ -122,11 +135,6 @@ public class CourseGenerationService {
                 spot.mapX().doubleValue());
     }
 
-    /** 시작 좌표로부터 스팟까지의 직선 거리(미터). 후보 풀 정렬용. */
-    private static double distanceFrom(double lat, double lon, SpotCandidate spot) {
-        return CourseAssembler.distanceMeters(lat, lon, spot.mapY().doubleValue(), spot.mapX().doubleValue());
-    }
-
     private String buildRerankQueryText(CourseIntent intent) {
         if (intent.mood().isEmpty() && intent.companion() == null) return null;
         StringBuilder sb = new StringBuilder();
@@ -138,30 +146,27 @@ public class CourseGenerationService {
         return sb.toString();
     }
 
-    /** 카테고리 그룹의 후보 풀을 조회해 count개를 선택해 selected에 누적한다. */
-    private void selectGroup(List<String> categories, int count, double lat, double lon,
-                              String queryText, Map<String, SpotCandidate> selected) {
+    /**
+     * 카테고리 그룹의 후보 풀을 조회해 count개를 선택해 selected에 누적한다.
+     * 그룹의 카테고리를 한 쿼리로 묶어 조회하므로 풀은 그룹 전체 기준 거리순이고, DB가 이미
+     * CANDIDATE_POOL_SIZE개로 잘라서 주기 때문에 여기서는 정렬도 절단도 하지 않는다.
+     */
+    private void selectGroup(List<String> categories, int count, double lat, double lon, double radiusM,
+                             SpotReranker.Ranker ranker, Map<String, SpotCandidate> selected) {
         if (count <= 0) return;
 
-        List<SpotCandidate> pool = new ArrayList<>();
-        for (String category : categories) {
-            pool.addAll(spotLookupPort.findNearbyByCategory(category, lat, lon));
-        }
-        // 카테고리별 조회 결과를 순서대로 이어 붙였기 때문에 병합된 목록은 거리순이 아니다.
-        // 정렬 없이 앞에서 자르면 먼저 조회한 카테고리가 후보 풀을 독점해
-        // 뒤쪽 카테고리(예: HS/VE)가 한 건도 후보에 들어가지 못한다.
-        pool = pool.stream()
+        // 한 스팟은 카테고리가 하나라 그룹 간 중복은 원칙적으로 없지만, 데이터 이상에 대비해 걸러 둔다
+        List<SpotCandidate> pool = spotLookupPort
+                .findNearbyByCategories(categories, lat, lon, radiusM, CANDIDATE_POOL_SIZE).stream()
                 .filter(spot -> !selected.containsKey(spot.contentId()))
                 .filter(SpotCandidate::hasCoordinate)
-                .sorted(Comparator.comparingDouble(spot -> distanceFrom(lat, lon, spot)))
-                .limit(CANDIDATE_POOL_SIZE)
                 .toList();
         if (pool.isEmpty()) return;
 
         List<SpotCandidate> chosen;
-        if (queryText != null) {
+        if (ranker != null) {
             List<String> poolIds = pool.stream().map(SpotCandidate::contentId).toList();
-            List<String> rankedIds = spotReranker.rerank(queryText, poolIds);
+            List<String> rankedIds = ranker.rerank(poolIds);
             Map<String, SpotCandidate> poolByContentId = new LinkedHashMap<>();
             pool.forEach(spot -> poolByContentId.put(spot.contentId(), spot));
             chosen = rankedIds.stream()

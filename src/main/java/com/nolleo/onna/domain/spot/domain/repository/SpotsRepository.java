@@ -24,8 +24,11 @@ public interface SpotsRepository {
     /** 주어진 content_id 목록 중 활성 스팟만 일괄 조회 — 새 참조를 만드는 쓰기 경로용 (조회 경로는 findByIds). */
     List<Spot> findActiveByIds(List<String> contentIds);
 
-    /** 활성 스팟 중 좌표 기준 거리순 조회. lclsSystm1이 null이면 카테고리 제한 없이 조회. */
-    List<Spot> findNearbyByCategory(String lclsSystm1, double lat, double lon);
+    /**
+     * 활성 스팟 중 카테고리 목록(lcls_systm_1)에 속하고 기준점에서 radiusM(미터) 안에 있는 스팟을
+     * 가까운 순으로 최대 limit개 조회. 정렬·절단은 DB(PostGIS KNN)가 담당하므로 호출자는 순서를 그대로 신뢰한다.
+     */
+    List<Spot> findNearbyByCategories(List<String> lclsSystm1Codes, double lat, double lon, double radiusM, int limit);
 
     /** 주어진 content_id 목록을 좌표 기준 거리순으로 정렬해서 조회. */
     List<Spot> findByIdsOrderByDistance(List<String> contentIds, double lat, double lon);

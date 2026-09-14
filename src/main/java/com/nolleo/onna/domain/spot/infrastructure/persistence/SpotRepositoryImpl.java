@@ -45,8 +45,10 @@ public class SpotRepositoryImpl implements SpotsRepository {
     }
 
     @Override
-    public List<Spot> findNearbyByCategory(String lclsSystm1, double lat, double lon) {
-        return jpaRepository.findNearbyByCategory(lclsSystm1, lat, lon).stream()
+    public List<Spot> findNearbyByCategories(List<String> lclsSystm1Codes, double lat, double lon,
+                                             double radiusM, int limit) {
+        if (lclsSystm1Codes.isEmpty() || limit <= 0) return List.of();
+        return jpaRepository.findNearbyByCategories(lclsSystm1Codes, lat, lon, radiusM, limit).stream()
                 .map(SpotEntity::toDomain)
                 .toList();
     }
