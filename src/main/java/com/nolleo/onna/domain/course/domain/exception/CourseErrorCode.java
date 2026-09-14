@@ -17,6 +17,7 @@ public enum CourseErrorCode implements ErrorCode {
     // AI 코스 생성 — 외부 의존성·동시성
     AI_SERVICE_UNAVAILABLE(503, "AI_SERVICE_UNAVAILABLE", "AI 서비스에 일시적으로 연결할 수 없습니다. 잠시 후 다시 시도해주세요"),
     GENERATION_LIMIT_UNAVAILABLE(503, "GENERATION_LIMIT_UNAVAILABLE", "생성 횟수를 확인할 수 없어 코스를 만들 수 없습니다. 잠시 후 다시 시도해주세요"),
+    CHAT_LIMIT_UNAVAILABLE(503, "CHAT_LIMIT_UNAVAILABLE", "이용 횟수를 확인할 수 없어 대화를 진행할 수 없습니다. 잠시 후 다시 시도해주세요"),
     COURSE_GENERATION_IN_PROGRESS(409, "COURSE_GENERATION_IN_PROGRESS", "이 대화의 코스를 이미 만들고 있어요. 잠시 후 내 코스 목록을 확인해주세요"),
     NO_SPOT_CANDIDATES(404, "NO_SPOT_CANDIDATES", "조건에 맞는 방문 스팟을 찾지 못했습니다. 지역이나 조건을 바꿔 다시 시도해주세요"),
 

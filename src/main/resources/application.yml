@@ -117,6 +117,13 @@ app:
   http:
     connect-timeout-ms: ${HTTP_CONNECT_TIMEOUT_MS:3000}
     read-timeout-ms: ${HTTP_READ_TIMEOUT_MS:15000}
+  # AI 챗봇 대화 비용 안전장치 (ChatLimitPolicy). 사용자에게 보이는 한도는 일일 코스 생성 3회이고,
+  # 아래는 생성 없이 메시지만 계속 보내는 경우의 상한 — 정상 사용에서는 걸리지 않는 값으로 둔다.
+  # 최악의 하루 비용 ≈ Gemini 파싱·되묻기 (daily-message-limit × 2회) + 생성 3회분
+  chat:
+    max-turns-per-conversation: ${CHAT_MAX_TURNS_PER_CONVERSATION:10}
+    max-off-topic-streak: ${CHAT_MAX_OFF_TOPIC_STREAK:3}
+    daily-message-limit: ${CHAT_DAILY_MESSAGE_LIMIT:40}
 
 external:
   weather:

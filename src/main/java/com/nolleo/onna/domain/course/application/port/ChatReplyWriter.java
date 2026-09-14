@@ -22,4 +22,15 @@ public interface ChatReplyWriter {
 
     /** 생성 완료 안내 */
     String ready(CourseIntent intent);
+
+    // ── 비용 상한 안내 (ChatLimitPolicy) — 고정 문구, AI 호출 없음 ──────────────
+
+    /** 한 대화의 메시지 수가 상한을 넘어 대화를 종료할 때 — 새 대화에서 조건을 한 번에 말해달라고 안내 */
+    String turnLimitReached();
+
+    /** 여행 무관 메시지가 연속 상한에 도달해 대화를 종료할 때 */
+    String offTopicLimitReached();
+
+    /** 하루 메시지 수 상한에 도달했을 때 — 내일 다시 이용 안내 */
+    String messageLimitReached(int dailyLimit);
 }
