@@ -2,8 +2,10 @@ package com.nolleo.onna.domain.course.infrastructure.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.course.application.dto.ParsedMessage;
 import com.nolleo.onna.domain.course.application.port.CourseIntentParser;
+import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotHints;
 import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
@@ -67,14 +69,22 @@ public class GeminiIntentParser implements CourseIntentParser {
             7. JSON 외 다른 텍스트 출력 금지
             """;
 
+    /**
+     * 의도 파싱은 폴백할 수 없는 단계다(파싱이 안 되면 대화를 진행할 수 없다).
+     * Gemini 호출·응답 해석 실패는 AI_SERVICE_UNAVAILABLE(503)로 변환해 500과 내부 메시지가 노출되지 않게 한다.
+     */
     @Override
     public ParsedMessage parse(String message) {
         String supportedAreas = Arrays.stream(DistrictCenter.values())
                 .map(DistrictCenter::getSigngu)
                 .collect(Collectors.joining(", "));
 
-        String json = geminiClient.generateJson(
-                String.format(SYSTEM_INSTRUCTION, supportedAreas), message);
+        String json;
+        try {
+            json = geminiClient.generateJson(String.format(SYSTEM_INSTRUCTION, supportedAreas), message);
+        } catch (GeminiClient.GeminiApiException e) {
+            throw new BusinessException(CourseErrorCode.AI_SERVICE_UNAVAILABLE);
+        }
 
         try {
             JsonNode node = objectMapper.readTree(json);
@@ -85,7 +95,7 @@ public class GeminiIntentParser implements CourseIntentParser {
             return new ParsedMessage(true, toIntent(node));
         } catch (Exception e) {
             log.error("Intent 파싱 실패 | Gemini 응답: {}", json, e);
-            throw new GeminiClient.GeminiApiException("의도 분석 결과 파싱 실패", e);
+            throw new BusinessException(CourseErrorCode.AI_SERVICE_UNAVAILABLE);
         }
     }
 

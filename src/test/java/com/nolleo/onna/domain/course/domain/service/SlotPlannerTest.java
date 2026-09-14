@@ -1,5 +1,6 @@
 package com.nolleo.onna.domain.course.domain.service;
 
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotHints;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotPlan;
 import org.junit.jupiter.api.DisplayName;
@@ -36,5 +37,31 @@ class SlotPlannerTest {
         SlotPlan plan = SlotPlanner.plan(new SlotHints(null, null, null, 2));
 
         assertThat(plan).isEqualTo(new SlotPlan(2, 1, 3, 2));
+    }
+
+    @Test
+    @DisplayName("총합이 코스 최대 개수를 넘으면 액티비티 → 관광 → 카페 → 식사 순으로 줄여 상한에 맞춘다")
+    void plan_capsTotalAtMaxItems() {
+        // 10 + 5 + 5 + 5 = 25 → 10 초과: 액티비티 5 전부, 관광 5 전부를 잘라 15
+        SlotPlan plan = SlotPlanner.plan(new SlotHints(10, 5, 5, 5));
+
+        assertThat(plan).isEqualTo(new SlotPlan(10, 5, 0, 0));
+        assertThat(plan.totalCount()).isEqualTo(CoursePlaces.MAX_ITEMS);
+    }
+
+    @Test
+    @DisplayName("식사만으로 상한을 넘으면 식사도 상한까지만 남긴다")
+    void plan_capsFood_whenFoodAloneExceedsMax() {
+        SlotPlan plan = SlotPlanner.plan(new SlotHints(40, 0, 0, 0));
+
+        assertThat(plan).isEqualTo(new SlotPlan(CoursePlaces.MAX_ITEMS, 0, 0, 0));
+    }
+
+    @Test
+    @DisplayName("음수 힌트는 0으로 취급한다 (기본값으로 되돌리지 않는다)")
+    void plan_treatsNegativeAsZero() {
+        SlotPlan plan = SlotPlanner.plan(new SlotHints(-3, null, -1, null));
+
+        assertThat(plan).isEqualTo(new SlotPlan(0, 1, 0, 0));
     }
 }
