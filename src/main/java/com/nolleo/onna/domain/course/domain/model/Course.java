@@ -237,11 +237,24 @@ public class Course {
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.UNKNOWN_START_AREA));
     }
 
-    /** AI가 생성한 제목·소개 문구 적용 — 코스 구성 완료 후 호출 */
+    /**
+     * AI가 생성한 제목·소개 문구 적용 — 코스 구성 완료 후 호출.
+     *
+     * AI 출력은 길이를 강제할 수 없으므로 거부하지 않고 편집 경로와 같은 상한
+     * (MAX_TITLE_LENGTH · MAX_DESCRIPTION_LENGTH)으로 잘라 넣는다 — 제목이 길다고 저장이 실패해선 안 된다.
+     * 제목이 비어 있는 것은 프롬프트·폴백 결함이라 프로그래밍 오류로 취급한다.
+     */
     public void applyAiContent(String title, String description) {
-        if (title == null || title.isBlank()) throw new IllegalArgumentException("제목은 비어 있을 수 없습니다.");
-        this.title = title;
-        this.description = description;
+        String strippedTitle = title == null ? "" : title.strip();
+        if (strippedTitle.isEmpty()) throw new IllegalArgumentException("제목은 비어 있을 수 없습니다.");
+        this.title = truncate(strippedTitle, MAX_TITLE_LENGTH);
+
+        String strippedDescription = description == null ? "" : description.strip();
+        this.description = strippedDescription.isEmpty() ? null : truncate(strippedDescription, MAX_DESCRIPTION_LENGTH);
+    }
+
+    private static String truncate(String text, int maxLength) {
+        return text.length() <= maxLength ? text : text.substring(0, maxLength);
     }
 
     /** 사용자가 편집한 제목 — 앞뒤 공백 제거 후 1~MAX_TITLE_LENGTH자 */

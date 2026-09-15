@@ -13,8 +13,12 @@ import java.util.Map;
  */
 public interface SpotLookupPort {
 
-    /** 좌표 기준 거리순으로 카테고리에 해당하는 후보 스팟을 조회 */
-    List<SpotCandidate> findNearbyByCategory(String categoryCode, double lat, double lon);
+    /**
+     * 카테고리 목록에 속하고 기준점에서 radiusM(미터) 안에 있는 후보 스팟을 가까운 순으로 최대 limit개 조회.
+     * 정렬·절단은 어댑터(DB)가 끝내서 주므로 호출자는 결과 순서를 거리순으로 그대로 신뢰한다.
+     */
+    List<SpotCandidate> findNearbyByCategories(List<String> categoryCodes, double lat, double lon,
+                                               double radiusM, int limit);
 
     /** content_id 목록으로 스팟을 일괄 조회 — 활성 여부와 무관 (이미 담긴 스팟을 보여주는 조회 경로용) */
     Map<String, SpotCandidate> findByIds(List<String> contentIds);

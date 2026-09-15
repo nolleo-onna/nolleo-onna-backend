@@ -7,8 +7,8 @@ import java.util.List;
  *
  * 필드 정책:
  *   startArea      필수. 없으면 코스 생성 불가 → 되묻기
- *   nearbyAllowed  자동 추출 ("근처도 괜찮아")
- *   budget         선택. null = 무제한
+ *   nearbyAllowed  자동 추출 ("근처도 괜찮아") — 후보 스팟 검색 반경을 넓힌다 (CourseGenerationService)
+ *   budget         선택. null = 무제한. 스냅샷으로 저장만 하고 생성 로직(후보 선택·가격 필터)에는 아직 반영하지 않는다
  *   companion      선택. null = 생략
  *   mood           선택. empty = 벡터 리랭킹 스킵
  *   slotHints      자동 추출. isEmpty = 기본 패턴
