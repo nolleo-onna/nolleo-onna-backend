@@ -643,8 +643,8 @@ class CourseChatServiceTest {
         }
 
         @Test
-        @DisplayName("사용자가 지역을 직접 말했으면 기준점을 찾아도 그 지역을 유지한다 (검색 중심만 기준점 좌표)")
-        void chat_keepsExplicitStartArea_whenAnchorResolved() {
+        @DisplayName("사용자가 지역을 직접 말했더라도 기준점을 찾으면 지역이 기준점 위치로 바뀐다 (검색 중심·표시 지역 일치)")
+        void chat_overridesExplicitStartArea_whenAnchorResolved() {
             // given — "서면"이라고 했는데 행사장은 광안리 옆
             allowMessages();
             given(conversationStore.find(null)).willReturn(Optional.empty());
@@ -657,8 +657,8 @@ class CourseChatServiceTest {
             // when
             ChatResult result = service.chat(USER_ID, "서면에서 시작, 부산국제항만컨퍼런스 근처", null);
 
-            // then
-            assertThat(result.intent().startArea()).isEqualTo("서면");
+            // then — 행사장(광안리 옆) 기준으로 지역이 바뀐다
+            assertThat(result.intent().startArea()).isEqualTo("광안리");
             assertThat(result.intent().center()).contains(result.intent().anchor().point());
         }
     }

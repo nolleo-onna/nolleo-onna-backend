@@ -63,6 +63,22 @@ class CourseTest {
     }
 
     @Test
+    @DisplayName("폼 코스는 ALGORITHM 모드에 courseType 없이 템플릿 제목만 받고 소개는 비워둔다 — 제목은 상한으로 잘라 넣는다")
+    void createByForm_templateTitle_noDescription() {
+        Course course = Course.createByForm(1L, UUID.randomUUID(), "  광안리 중심 코스  ", INTENT, "FORM");
+        Course longTitle = Course.createByForm(1L, UUID.randomUUID(), "제".repeat(Course.MAX_TITLE_LENGTH + 5), INTENT, "FORM");
+
+        assertThat(course.getGenerationMode()).isEqualTo(GenerationMode.ALGORITHM);
+        assertThat(course.getCourseType()).isNull();
+        assertThat(course.getTitle()).isEqualTo("광안리 중심 코스");
+        assertThat(course.getDescription()).isNull();
+        assertThat(course.getCreatedBy()).isEqualTo("FORM");
+        assertThat(longTitle.getTitle()).hasSize(Course.MAX_TITLE_LENGTH);
+        assertThatThrownBy(() -> Course.createByForm(1L, UUID.randomUUID(), " ", INTENT, "FORM"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     @DisplayName("addItem은 호출 순서대로 1부터 순번을 매기고 PlaceRef를 그대로 보관한다")
     void addItem_assignsSerialInOrder() {
         Course course = aiCourse();

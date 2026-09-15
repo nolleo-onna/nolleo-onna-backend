@@ -104,13 +104,13 @@ class CourseAnchorResolverTest {
     }
 
     @Test
-    @DisplayName("사용자가 지역을 직접 말했으면 startArea는 유지하고 좌표만 채운다")
-    void resolve_keepsExplicitStartArea() {
+    @DisplayName("사용자가 지역을 직접 말했더라도 기준점을 찾으면 startArea를 기준점 위치의 지역으로 덮어쓴다 — 지역 표시와 스팟 위치가 어긋나지 않게")
+    void resolve_overridesExplicitStartArea_withAnchorDistrict() {
         stubEvents(NAME, EVENT);
 
         CourseIntent resolved = resolver.resolve(intent("서면", CourseAnchor.of(NAME)));
 
-        assertThat(resolved.startArea()).isEqualTo("서면");
+        assertThat(resolved.startArea()).isEqualTo("해운대");
         assertThat(resolved.center()).contains(new GeoPoint(35.1587, 129.1604));
     }
 

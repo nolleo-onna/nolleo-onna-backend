@@ -1,5 +1,6 @@
 package com.nolleo.onna.domain.course.domain.service;
 
+import com.nolleo.onna.domain.course.domain.model.vo.BudgetTier;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotHints;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotPlan;
@@ -63,5 +64,22 @@ class SlotPlannerTest {
         SlotPlan plan = SlotPlanner.plan(new SlotHints(-3, null, -1, null));
 
         assertThat(plan).isEqualTo(new SlotPlan(0, 1, 0, 0));
+    }
+
+    @Test
+    @DisplayName("예산 등급이 기본 슬롯을 정한다 — 무지출은 식사·카페 없이 관광 4, 1만원은 식사 1, 3만원 이상은 기본 패턴")
+    void plan_usesBudgetTierDefaults() {
+        assertThat(SlotPlanner.plan(null, BudgetTier.NONE)).isEqualTo(new SlotPlan(0, 0, 4, 0));
+        assertThat(SlotPlanner.plan(null, BudgetTier.UNDER_10K)).isEqualTo(new SlotPlan(1, 0, 3, 0));
+        assertThat(SlotPlanner.plan(null, BudgetTier.UNDER_30K)).isEqualTo(new SlotPlan(2, 1, 3, 0));
+        assertThat(SlotPlanner.plan(null, BudgetTier.UNLIMITED)).isEqualTo(SlotPlanner.plan(null));
+    }
+
+    @Test
+    @DisplayName("사용자가 명시한 힌트는 예산 등급 기본값보다 우선한다")
+    void plan_explicitHintsOverrideTierDefaults() {
+        SlotPlan plan = SlotPlanner.plan(new SlotHints(2, null, 1, null), BudgetTier.UNDER_10K);
+
+        assertThat(plan).isEqualTo(new SlotPlan(2, 0, 1, 0)); // 식사·관광은 힌트, 카페·액티비티는 등급 기본값
     }
 }
