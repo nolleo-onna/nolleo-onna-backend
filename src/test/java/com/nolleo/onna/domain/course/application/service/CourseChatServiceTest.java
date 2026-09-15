@@ -5,14 +5,21 @@ import com.nolleo.onna.domain.course.application.ChatLimitPolicy;
 import com.nolleo.onna.domain.course.application.dto.ChatResult;
 import com.nolleo.onna.domain.course.application.dto.ConversationState;
 import com.nolleo.onna.domain.course.application.dto.ParsedMessage;
+import com.nolleo.onna.domain.course.application.dto.EventCandidate;
+import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.port.ChatMessageLimiter;
+import com.nolleo.onna.domain.course.application.port.EventLookupPort;
 import com.nolleo.onna.domain.course.application.port.ChatReplyWriter;
 import com.nolleo.onna.domain.course.application.port.ConversationStore;
 import com.nolleo.onna.domain.course.application.port.CourseGenerationLimiter;
 import com.nolleo.onna.domain.course.application.port.CourseIntentParser;
+import com.nolleo.onna.domain.course.application.port.SpotLookupPort;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
+import com.nolleo.onna.domain.course.domain.model.vo.CourseAnchor;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
+import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
+import com.nolleo.onna.domain.course.domain.model.vo.SpotPin;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -22,6 +29,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,6 +38,9 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -49,6 +61,8 @@ class CourseChatServiceTest {
     @Mock CourseGenerationLimiter generationLimiter;
     @Mock ChatMessageLimiter messageLimiter;
     @Mock CourseGenerationService courseGenerationService;
+    @Mock SpotLookupPort spotLookupPort;
+    @Mock EventLookupPort eventLookupPort;
 
     private static final int MAX_TURNS = 10;
     private static final int MAX_OFF_TOPIC_STREAK = 3;
@@ -58,8 +72,10 @@ class CourseChatServiceTest {
 
     @BeforeEach
     void setUp() {
+        // 리졸버들은 목이 아니라 실제 객체 — 지정 장소·기준점이 없는 대화에서는 포트를 부르지 않으므로 스텁이 필요 없다
         service = new CourseChatService(intentParser, replyWriter, conversationStore, generationLimiter,
                 messageLimiter, courseGenerationService,
+                new SpotPinResolver(spotLookupPort), new CourseAnchorResolver(eventLookupPort, spotLookupPort),
                 new ChatLimitPolicy(MAX_TURNS, MAX_OFF_TOPIC_STREAK, DAILY_MESSAGE_LIMIT));
     }
 
@@ -445,4 +461,206 @@ class CourseChatServiceTest {
             assertThat(captor.getValue().offTopicStreak()).isEqualTo(1);
         }
     }
+
+    // ── 장소 지정 매칭 (생성 확인 시점) ──────────────────────────────────────
+
+    @Nested
+    @DisplayName("장소 지정 매칭")
+    class SpotPins {
+
+        private static final double LAT = DistrictCenter.GWANGAN.getLatitude();
+        private static final double LON = DistrictCenter.GWANGAN.getLongitude();
+        private static final SpotCandidate BEACH = new SpotCandidate("beach", "광안리해수욕장", null, "NA", "자연/공원",
+                BigDecimal.valueOf(129.1188), BigDecimal.valueOf(35.1532));
+
+        /** 지역·동행이 있어 바로 확인 단계로 가는 intent + 미해결 지정 */
+        private static CourseIntent readyWithPins(List<SpotPin> include, List<SpotPin> exclude) {
+            return new CourseIntent("광안리", false, null, "연인", List.of(), null, false, include, exclude);
+        }
+
+        private ConversationState savedStateOfNewConversation() {
+            ArgumentCaptor<ConversationState> captor = ArgumentCaptor.forClass(ConversationState.class);
+            verify(conversationStore).save(anyString(), captor.capture());
+            return captor.getValue();
+        }
+
+        @Test
+        @DisplayName("확인 단계에서 지정 장소를 실제 스팟과 맞추고, 매칭 결과를 대화 상태와 확인 문구·응답 intent에 모두 반영한다")
+        void chat_resolvesPins_atConfirm() {
+            // given
+            allowMessages();
+            given(conversationStore.find(null)).willReturn(Optional.empty());
+            given(intentParser.parse("광안리 바다는 꼭 넣어줘, 연인이랑"))
+                    .willReturn(new ParsedMessage(true, readyWithPins(List.of(SpotPin.of("광안리 바다")), List.of())));
+            given(spotLookupPort.findActiveByTitleNear(eq("광안리 바다"), eq(LAT), eq(LON), anyInt())).willReturn(List.of(BEACH));
+            given(replyWriter.confirmGenerate(any(CourseIntent.class))).willReturn("만들까요?");
+
+            // when
+            ChatResult result = service.chat(USER_ID, "광안리 바다는 꼭 넣어줘, 연인이랑", null);
+
+            // then
+            SpotPin expected = new SpotPin("광안리 바다", "beach", "광안리해수욕장");
+            assertThat(result.status()).isEqualTo(ChatResult.Status.NEED_MORE_INFO);
+            assertThat(result.intent().includeSpots()).containsExactly(expected);
+
+            ConversationState saved = savedStateOfNewConversation();
+            assertThat(saved.awaitingConfirmation()).isTrue();
+            assertThat(saved.intent().includeSpots()).containsExactly(expected);
+
+            ArgumentCaptor<CourseIntent> confirmed = ArgumentCaptor.forClass(CourseIntent.class);
+            verify(replyWriter).confirmGenerate(confirmed.capture());
+            assertThat(confirmed.getValue().includeSpots()).containsExactly(expected);
+        }
+
+        @Test
+        @DisplayName("이름에 맞는 스팟이 없으면 미해결 그대로 남겨 확인 문구에서 알리고, 생성은 막지 않는다")
+        void chat_keepsUnresolvedPin_whenNotFound() {
+            // given
+            allowMessages();
+            given(conversationStore.find(null)).willReturn(Optional.empty());
+            given(intentParser.parse("동백섬 바다는 빼줘, 연인이랑 광안리"))
+                    .willReturn(new ParsedMessage(true, readyWithPins(List.of(), List.of(SpotPin.of("동백섬 바다")))));
+            given(spotLookupPort.findActiveByTitleNear(eq("동백섬 바다"), eq(LAT), eq(LON), anyInt())).willReturn(List.of());
+            given(replyWriter.confirmGenerate(any(CourseIntent.class))).willReturn("만들까요?");
+
+            // when
+            ChatResult result = service.chat(USER_ID, "동백섬 바다는 빼줘, 연인이랑 광안리", null);
+
+            // then
+            assertThat(result.status()).isEqualTo(ChatResult.Status.NEED_MORE_INFO);
+            assertThat(result.intent().excludeSpots()).containsExactly(SpotPin.of("동백섬 바다"));
+            assertThat(savedStateOfNewConversation().awaitingConfirmation()).isTrue();
+        }
+
+        @Test
+        @DisplayName("시작 지역이 없어 되묻는 단계에서는 지정 장소를 매칭하지 않는다 (기준점이 없다)")
+        void chat_doesNotResolve_whenAskingStartArea() {
+            // given
+            allowMessages();
+            given(conversationStore.find(null)).willReturn(Optional.empty());
+            given(intentParser.parse("바다 넣어줘"))
+                    .willReturn(new ParsedMessage(true, new CourseIntent(null, false, null, null, List.of(), null, false,
+                            List.of(SpotPin.of("광안리 바다")), List.of())));
+            given(replyWriter.askStartArea(any(CourseIntent.class))).willReturn("어디서 시작할까요?");
+
+            // when
+            ChatResult result = service.chat(USER_ID, "바다 넣어줘", null);
+
+            // then
+            assertThat(result.status()).isEqualTo(ChatResult.Status.NEED_MORE_INFO);
+            assertThat(result.intent().hasUnresolvedPins()).isTrue();
+            verifyNoInteractions(spotLookupPort);
+        }
+    }
+
+    // ── 기준점 ("X 근처") ────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("기준점 매칭")
+    class Anchors {
+
+        private static final String CONFERENCE = "부산국제항만컨퍼런스";
+        /** 광안리 해수욕장 바로 옆 좌표 — 가장 가까운 지원 지역은 광안리 */
+        private static final EventCandidate CONFERENCE_EVENT = new EventCandidate("ev1", "부산국제항만컨퍼런스 2026",
+                BigDecimal.valueOf(129.1190), BigDecimal.valueOf(35.1535),
+                LocalDate.of(2026, 10, 14), LocalDate.of(2026, 10, 16), "부산항국제전시컨벤션센터");
+
+        /** 지역은 말하지 않고 기준점 + 동행만 말한 intent */
+        private static CourseIntent anchoredNoArea(String anchorName) {
+            return new CourseIntent(null, false, null, "친구", List.of(), null, false,
+                    List.of(), List.of(), CourseAnchor.of(anchorName));
+        }
+
+        @Test
+        @DisplayName("행사 데이터에서 기준점을 찾으면 좌표를 채우고 시작 지역을 가장 가까운 지원 지역으로 정해 바로 확인 단계로 간다")
+        void chat_resolvesAnchorFromEvent_andFillsStartArea() {
+            // given
+            allowMessages();
+            given(conversationStore.find(null)).willReturn(Optional.empty());
+            given(intentParser.parse("부산국제항만컨퍼런스 근처 친구랑 갈만한 곳"))
+                    .willReturn(new ParsedMessage(true, anchoredNoArea(CONFERENCE)));
+            given(eventLookupPort.findUpcomingByTitle(eq(CONFERENCE), anyInt())).willReturn(List.of(CONFERENCE_EVENT));
+            given(replyWriter.confirmGenerate(any(CourseIntent.class))).willReturn("만들까요?");
+
+            // when
+            ChatResult result = service.chat(USER_ID, "부산국제항만컨퍼런스 근처 친구랑 갈만한 곳", null);
+
+            // then
+            assertThat(result.status()).isEqualTo(ChatResult.Status.NEED_MORE_INFO);
+            CourseIntent intent = result.intent();
+            assertThat(intent.startArea()).isEqualTo("광안리");
+            assertThat(intent.anchor().isResolved()).isTrue();
+            assertThat(intent.anchor().source()).isEqualTo(CourseAnchor.AnchorSource.EVENT);
+            assertThat(intent.anchor().period()).isEqualTo("10.14~10.16");
+            assertThat(intent.center()).contains(intent.anchor().point());
+            verify(replyWriter, never()).askStartArea(any());
+            verifyNoInteractions(spotLookupPort); // 행사에서 찾았으면 스팟은 조회하지 않는다
+        }
+
+        @Test
+        @DisplayName("행사에 없으면 스팟 데이터에서 찾는다")
+        void chat_fallsBackToSpot_whenNoEvent() {
+            // given
+            SpotCandidate beach = new SpotCandidate("beach", "광안리해수욕장", null, "NA", "자연/공원",
+                    BigDecimal.valueOf(129.1188), BigDecimal.valueOf(35.1532));
+            allowMessages();
+            given(conversationStore.find(null)).willReturn(Optional.empty());
+            given(intentParser.parse("광안리 해수욕장 근처 친구랑"))
+                    .willReturn(new ParsedMessage(true, anchoredNoArea("광안리 해수욕장")));
+            given(eventLookupPort.findUpcomingByTitle(eq("광안리 해수욕장"), anyInt())).willReturn(List.of());
+            given(spotLookupPort.findActiveByTitleNear(eq("광안리 해수욕장"), anyDouble(), anyDouble(), anyInt())).willReturn(List.of(beach));
+            given(replyWriter.confirmGenerate(any(CourseIntent.class))).willReturn("만들까요?");
+
+            // when
+            ChatResult result = service.chat(USER_ID, "광안리 해수욕장 근처 친구랑", null);
+
+            // then
+            assertThat(result.intent().anchor().source()).isEqualTo(CourseAnchor.AnchorSource.SPOT);
+            assertThat(result.intent().startArea()).isEqualTo("광안리");
+        }
+
+        @Test
+        @DisplayName("행사·스팟 어디에도 없고 지역도 없으면 되묻기로 가며, 되묻기 문구에 못 찾은 기준점을 넘긴다")
+        void chat_asksStartArea_whenAnchorUnresolvedAndNoArea() {
+            // given
+            allowMessages();
+            given(conversationStore.find(null)).willReturn(Optional.empty());
+            given(intentParser.parse("없는행사 근처")).willReturn(new ParsedMessage(true, anchoredNoArea("없는행사")));
+            given(eventLookupPort.findUpcomingByTitle(eq("없는행사"), anyInt())).willReturn(List.of());
+            given(spotLookupPort.findActiveByTitleNear(eq("없는행사"), anyDouble(), anyDouble(), anyInt())).willReturn(List.of());
+            given(replyWriter.askStartArea(any(CourseIntent.class))).willReturn("'없는행사'를 찾지 못했어요. 어느 지역인가요?");
+
+            // when
+            ChatResult result = service.chat(USER_ID, "없는행사 근처", null);
+
+            // then
+            assertThat(result.status()).isEqualTo(ChatResult.Status.NEED_MORE_INFO);
+            assertThat(result.intent().hasUnresolvedAnchor()).isTrue();
+            ArgumentCaptor<CourseIntent> asked = ArgumentCaptor.forClass(CourseIntent.class);
+            verify(replyWriter).askStartArea(asked.capture());
+            assertThat(asked.getValue().anchor().name()).isEqualTo("없는행사");
+            verifyNoInteractions(courseGenerationService);
+        }
+
+        @Test
+        @DisplayName("사용자가 지역을 직접 말했으면 기준점을 찾아도 그 지역을 유지한다 (검색 중심만 기준점 좌표)")
+        void chat_keepsExplicitStartArea_whenAnchorResolved() {
+            // given — "서면"이라고 했는데 행사장은 광안리 옆
+            allowMessages();
+            given(conversationStore.find(null)).willReturn(Optional.empty());
+            CourseIntent parsed = new CourseIntent("서면", false, null, "친구", List.of(), null, false,
+                    List.of(), List.of(), CourseAnchor.of(CONFERENCE));
+            given(intentParser.parse("서면에서 시작, 부산국제항만컨퍼런스 근처")).willReturn(new ParsedMessage(true, parsed));
+            given(eventLookupPort.findUpcomingByTitle(eq(CONFERENCE), anyInt())).willReturn(List.of(CONFERENCE_EVENT));
+            given(replyWriter.confirmGenerate(any(CourseIntent.class))).willReturn("만들까요?");
+
+            // when
+            ChatResult result = service.chat(USER_ID, "서면에서 시작, 부산국제항만컨퍼런스 근처", null);
+
+            // then
+            assertThat(result.intent().startArea()).isEqualTo("서면");
+            assertThat(result.intent().center()).contains(result.intent().anchor().point());
+        }
+    }
+
 }

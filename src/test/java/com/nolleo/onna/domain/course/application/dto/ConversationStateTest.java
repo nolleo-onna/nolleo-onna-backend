@@ -2,6 +2,7 @@ package com.nolleo.onna.domain.course.application.dto;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
+import com.nolleo.onna.domain.course.domain.model.vo.SpotPin;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -34,7 +35,9 @@ class ConversationStateTest {
     @Test
     @DisplayName("직렬화 → 역직렬화 왕복에서 카운터가 보존된다")
     void roundTrip_keepsCounters() throws Exception {
-        CourseIntent intent = new CourseIntent("해운대", true, 50000, "친구", List.of("활기찬"), null, false);
+        // 장소 지정 목록까지 포함해 정규 생성자(9개 인자)로 역직렬화되는지 함께 확인한다
+        CourseIntent intent = new CourseIntent("해운대", true, 50000, "친구", List.of("활기찬"), null, false,
+                List.of(new SpotPin("해운대 바다", "c1", "해운대해수욕장")), List.of(SpotPin.of("동백섬")));
         ConversationState original = new ConversationState(intent, false, 4, 2);
 
         ConversationState restored = objectMapper.readValue(objectMapper.writeValueAsString(original), ConversationState.class);

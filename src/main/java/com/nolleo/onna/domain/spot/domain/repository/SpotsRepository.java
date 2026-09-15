@@ -30,9 +30,15 @@ public interface SpotsRepository {
      */
     List<Spot> findNearbyByCategories(List<String> lclsSystm1Codes, double lat, double lon, double radiusM, int limit);
 
+    /**
+     * 활성 스팟 중 제목이 키워드를 포함하는 스팟을 "정확히 일치 → 기준점에서 가까운 순"으로 최대 limit개 조회.
+     * 공백·대소문자를 무시하고 비교한다 ("광안리 해수욕장" ↔ "광안리해수욕장"). 사용자가 이름으로 지정한 스팟 매칭용.
+     */
+    List<Spot> findActiveByTitleNear(String title, double lat, double lon, int limit);
+
     /** 주어진 content_id 목록을 좌표 기준 거리순으로 정렬해서 조회. */
     List<Spot> findByIdsOrderByDistance(List<String> contentIds, double lat, double lon);
 
     /** 주어진 content_id 목록의 좌표로부터의 거리(미터)를 계산해서 반환. */
     Map<String, Integer> findDistancesFromPoint(List<String> contentIds, double lat, double lon);
-}
+}

@@ -1,5 +1,7 @@
 package com.nolleo.onna.domain.course.domain.model.vo;
 
+import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
+
 import java.util.Arrays;
 import java.util.Optional;
 
@@ -50,5 +52,21 @@ public enum DistrictCenter {
         return Arrays.stream(values())
                 .filter(d -> d.signgu.equals(signgu.trim()))
                 .findFirst();
+    }
+
+    public GeoPoint toGeoPoint() {
+        return new GeoPoint(latitude, longitude);
+    }
+
+    /**
+     * 좌표에서 가장 가까운 지원 지역 — 기준점("X 근처")의 좌표로 startArea를 채울 때 쓴다.
+     * 지원 지역 목록이 부산 전체를 덮지 않으므로(동구·남구 등 없음) 몇 km 떨어진 지역이 나올 수 있다 —
+     * 그래서 검색 중심은 이 지역이 아니라 기준점 좌표 자체를 쓴다.
+     */
+    public static DistrictCenter nearestTo(GeoPoint point) {
+        return Arrays.stream(values())
+                .min(java.util.Comparator.comparingDouble(d ->
+                        CourseAssembler.distanceMeters(point.latitude(), point.longitude(), d.latitude, d.longitude)))
+                .orElseThrow();
     }
 }

@@ -35,6 +35,26 @@ public interface SpotJpaRepository extends JpaRepository<SpotEntity, String> {
                                              @Param("radiusM") double radiusM,
                                              @Param("limit") int limit);
 
+    /**
+     * 활성 스팟 중 제목이 키워드를 포함하는 스팟을 "정확히 일치 → 기준점에서 가까운 순"으로 limit개 조회.
+     *
+     * 비교는 양쪽 공백을 제거하고 대소문자 무시로 한다 — 관광공사 제목은 "광안리해수욕장"처럼 붙여 쓰고
+     * 사용자는 "광안리 해수욕장"처럼 띄어 말하기 때문이다. compactKeyword는 호출자가 공백을 제거하고
+     * LIKE 와일드카드(% _ \)를 이스케이프해서 넘긴다.
+     */
+    @Query(value = """
+            SELECT * FROM sp_spots
+            WHERE is_active = true
+              AND REPLACE(title, ' ', '') ILIKE CONCAT('%', :compactKeyword, '%')
+            ORDER BY (LOWER(REPLACE(title, ' ', '')) = LOWER(:compactKeyword)) DESC,
+                     geog <-> ST_MakePoint(:lon, :lat)::geography
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<SpotEntity> findActiveByTitleNear(@Param("compactKeyword") String compactKeyword,
+                                           @Param("lat") double lat,
+                                           @Param("lon") double lon,
+                                           @Param("limit") int limit);
+
     @Query(value = """
             SELECT * FROM sp_spots WHERE content_id IN (:ids)
             ORDER BY geog <-> ST_MakePoint(:lon, :lat)::geography
@@ -51,4 +71,4 @@ public interface SpotJpaRepository extends JpaRepository<SpotEntity, String> {
     List<Object[]> findByIdsWithDistanceFromPoint(@Param("ids") List<String> ids,
                                                    @Param("lat") double lat,
                                                    @Param("lon") double lon);
-}
+}

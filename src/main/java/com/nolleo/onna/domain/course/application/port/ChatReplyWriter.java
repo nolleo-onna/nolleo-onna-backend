@@ -11,8 +11,8 @@ public interface ChatReplyWriter {
     /** 여행 코스 요청과 무관한 메시지일 때 — 서비스 안내 후 리다이렉트 */
     String offTopic();
 
-    /** 시작 지역이 없을 때 — 지역 되묻기 */
-    String askStartArea();
+    /** 시작 지역이 없을 때 — 지역 되묻기. 기준점("X 근처")을 말했는데 못 찾은 경우 그 사실도 함께 알린다 */
+    String askStartArea(CourseIntent intent);
 
     /** 선택 필드(예산·동행·분위기)가 전부 없을 때 — 묶어서 1회 되묻기 */
     String askPreferences(CourseIntent intent);

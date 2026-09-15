@@ -9,9 +9,10 @@ import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
-import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
+import com.nolleo.onna.domain.course.domain.model.vo.GeoPoint;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotPlan;
+import com.nolleo.onna.domain.course.domain.model.vo.SpotPin;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
 import com.nolleo.onna.domain.course.domain.service.SlotPlanner;
@@ -24,14 +25,17 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
  * SPOT 기반 AI 코스 생성 파이프라인 조율.
  *
  * 순서:
- *   1. 시작 지역 좌표 확정 (DistrictCenter)
+ *   1. 검색 중심 좌표 확정 — 기준점("X 근처")을 찾았으면 그 좌표, 아니면 시작 지역 중심 (CourseIntent.center)
  *   2. SlotHints → SlotPlan (카테고리별 목표 개수)
+ *   2-1. 사용자가 이름으로 지정한 스팟 — 확인 단계에서 못 끝낸 매칭을 마저 하고(SpotPinResolver), contentId로 일괄 조회한다.
+ *        포함 스팟은 미리 선택에 담아 해당 카테고리 슬롯을 차지하고, 제외 스팟은 후보 풀에서 걸러낸다. 못 찾은 지정은 건너뛴다
  *   3. 카테고리 그룹별 후보 풀 조회 (SpotLookupPort) — 검색 반경(nearbyAllowed) 안에서 가까운 순
  *      상위 CANDIDATE_POOL_SIZE개. 정렬·절단은 DB(PostGIS KNN)가 끝내므로 여기서 다시 정렬하지 않는다.
  *   4. mood/companion이 있으면 벡터 유사도로 후보 풀 재정렬, 없으면 거리순 그대로 상위 N개 선택.
@@ -75,12 +79,18 @@ public class CourseGenerationService {
     private final SpotReranker spotReranker;
     private final CourseContentWriter courseContentWriter;
     private final CourseRepository courseRepository;
+    private final SpotPinResolver spotPinResolver;
 
-    public Course generate(Long userId, CourseIntent intent, String createdBy) {
-        DistrictCenter center = DistrictCenter.of(intent.startArea())
+    public Course generate(Long userId, CourseIntent rawIntent, String createdBy) {
+        // 검색 중심 — 기준점("X 근처")을 찾았으면 그 좌표, 아니면 시작 지역 중심
+        GeoPoint center = rawIntent.center()
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.UNKNOWN_START_AREA));
-        double lat = center.getLatitude();
-        double lon = center.getLongitude();
+        double lat = center.latitude();
+        double lon = center.longitude();
+
+        // 지정 장소 매칭 — 확인 단계에서 이미 끝났으면 그대로, 남은 미해결 지정만 한 번 더 시도한다 (확인을 거치지 않는 경로 대비).
+        // 매칭 결과가 들어간 intent를 스냅샷으로 저장해 어떤 스팟으로 이해했는지 재현할 수 있게 한다
+        CourseIntent intent = spotPinResolver.resolve(rawIntent);
 
         SlotPlan plan = SlotPlanner.plan(intent.slotHints());
         double radiusM = intent.nearbyAllowed() ? NEARBY_SEARCH_RADIUS_M : SEARCH_RADIUS_M;
@@ -89,10 +99,24 @@ public class CourseGenerationService {
         String queryText = buildRerankQueryText(intent);
         SpotReranker.Ranker ranker = queryText != null ? spotReranker.prepare(queryText) : null;
 
+        // 사용자가 이름으로 지정한 스팟 — 포함은 후보 선택 전에 미리 담고, 제외는 후보 풀에서 걸러낸다.
+        // 매칭된 pin은 contentId로 일괄 조회한다. 끝내 못 찾은 지정은 로그만 남기고 건너뛴다(코스 생성은 계속) —
+        // 사용자에게는 확인 단계에서 이미 알렸다.
+        Map<String, SpotCandidate> pinned = lookupPinned(intent.includeSpots(), "포함");
+        Set<String> excludedIds = lookupPinned(intent.excludeSpots(), "제외").keySet();
+
         Map<String, SpotCandidate> selected = new LinkedHashMap<>();
-        selectGroup(List.of(FOOD_CATEGORY), plan.foodCount() + plan.cafeCount(), lat, lon, radiusM, ranker, selected);
-        selectGroup(ATTRACTION_CATEGORIES, plan.attractionCount(), lat, lon, radiusM, ranker, selected);
-        selectGroup(ACTIVITY_CATEGORIES, plan.activityCount(), lat, lon, radiusM, ranker, selected);
+        pinned.values().stream()
+                .filter(spot -> !excludedIds.contains(spot.contentId()))
+                .forEach(spot -> selected.put(spot.contentId(), spot));
+
+        // 지정 스팟은 해당 카테고리 그룹의 슬롯을 차지한다 — "관광지 1곳"에 광안리해수욕장을 넣었으면 관광지는 더 고르지 않는다
+        selectGroup(List.of(FOOD_CATEGORY), plan.foodCount() + plan.cafeCount() - countIn(selected, List.of(FOOD_CATEGORY)),
+                lat, lon, radiusM, ranker, excludedIds, selected);
+        selectGroup(ATTRACTION_CATEGORIES, plan.attractionCount() - countIn(selected, ATTRACTION_CATEGORIES),
+                lat, lon, radiusM, ranker, excludedIds, selected);
+        selectGroup(ACTIVITY_CATEGORIES, plan.activityCount() - countIn(selected, ACTIVITY_CATEGORIES),
+                lat, lon, radiusM, ranker, excludedIds, selected);
 
         // SpotCandidate → Course 컨텍스트의 Waypoint VO 변환 (좌표 없는 스팟은 제외)
         List<CourseAssembler.Waypoint> waypoints = selected.values().stream()
@@ -143,6 +167,37 @@ public class CourseGenerationService {
                 spot.mapX().doubleValue());
     }
 
+    /**
+     * 매칭된 지정 장소(SpotPin)의 스팟을 contentId로 일괄 조회한다 (contentId → 후보). 같은 스팟으로 풀리는 지정은 한 번만 담는다.
+     * 미해결 pin(끝내 못 찾은 이름)과 그 사이 비활성화된 스팟은 건너뛴다 — 지정 하나 때문에 코스 생성 전체를 실패시키지 않는다.
+     */
+    private Map<String, SpotCandidate> lookupPinned(List<SpotPin> pins, String purpose) {
+        List<String> knownIds = pins.stream().filter(SpotPin::isResolved).map(SpotPin::contentId).distinct().toList();
+        Map<String, SpotCandidate> activeById = knownIds.isEmpty() ? Map.of() : spotLookupPort.findActiveByIds(knownIds);
+
+        Map<String, SpotCandidate> found = new LinkedHashMap<>();
+        for (SpotPin pin : pins) {
+            if (!pin.isResolved()) {
+                log.warn("{} 지정 스팟을 찾지 못해 건너뜀 name={}", purpose, pin.name());
+                continue;
+            }
+            SpotCandidate spot = activeById.get(pin.contentId());
+            if (spot == null) {
+                log.warn("{} 지정 스팟이 더 이상 활성이 아니라 건너뜀 name={} contentId={}", purpose, pin.name(), pin.contentId());
+                continue;
+            }
+            found.put(spot.contentId(), spot);
+        }
+        return found;
+    }
+
+    /** selected 중 카테고리가 categories에 속하는 스팟 수 — 지정 스팟이 차지한 슬롯 계산용 */
+    private static int countIn(Map<String, SpotCandidate> selected, List<String> categories) {
+        return (int) selected.values().stream()
+                .filter(spot -> spot.categoryCode() != null && categories.contains(spot.categoryCode()))
+                .count();
+    }
+
     private String buildRerankQueryText(CourseIntent intent) {
         if (intent.mood().isEmpty() && intent.companion() == null) return null;
         StringBuilder sb = new StringBuilder();
@@ -160,13 +215,16 @@ public class CourseGenerationService {
      * CANDIDATE_POOL_SIZE개로 잘라서 주기 때문에 여기서는 정렬도 절단도 하지 않는다.
      */
     private void selectGroup(List<String> categories, int count, double lat, double lon, double radiusM,
-                             SpotReranker.Ranker ranker, Map<String, SpotCandidate> selected) {
+                             SpotReranker.Ranker ranker, Set<String> excludedIds,
+                             Map<String, SpotCandidate> selected) {
         if (count <= 0) return;
 
-        // 한 스팟은 카테고리가 하나라 그룹 간 중복은 원칙적으로 없지만, 데이터 이상에 대비해 걸러 둔다
+        // 한 스팟은 카테고리가 하나라 그룹 간 중복은 원칙적으로 없지만, 데이터 이상에 대비해 걸러 둔다.
+        // 사용자가 빼달라고 한 스팟은 후보 풀에서 제거한다 (풀은 DB가 20개로 잘라 주므로 제외만큼 후보가 줄 수 있다)
         List<SpotCandidate> pool = spotLookupPort
                 .findNearbyByCategories(categories, lat, lon, radiusM, CANDIDATE_POOL_SIZE).stream()
                 .filter(spot -> !selected.containsKey(spot.contentId()))
+                .filter(spot -> !excludedIds.contains(spot.contentId()))
                 .filter(SpotCandidate::hasCoordinate)
                 .toList();
         if (pool.isEmpty()) return;
