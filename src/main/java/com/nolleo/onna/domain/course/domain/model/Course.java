@@ -5,8 +5,8 @@ import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseType;
-import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
 import com.nolleo.onna.domain.course.domain.model.vo.GenerationMode;
+import com.nolleo.onna.domain.course.domain.model.vo.GeoPoint;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.ShareInfo;
 import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
@@ -181,12 +181,12 @@ public class Course {
     public void replaceItems(List<VisitStop> stops) {
         List<PlaceRef> refs = stops == null ? null : stops.stream().map(VisitStop::placeRef).toList();
         new CoursePlaces(refs); // 개수·중복 불변식 — 규칙은 CoursePlaces 한 곳에만 있다
-        DistrictCenter start = startPoint();
+        GeoPoint start = startPoint();
 
         List<Waypoint> waypoints = stops.stream()
                 .map(stop -> new Waypoint(stop.placeRef().originalId(), stop.latitude(), stop.longitude()))
                 .toList();
-        List<AssembledItem> measured = CourseAssembler.measure(start.getLatitude(), start.getLongitude(), waypoints);
+        List<AssembledItem> measured = CourseAssembler.measure(start.latitude(), start.longitude(), waypoints);
 
         items.clear();
         for (int i = 0; i < stops.size(); i++) {
@@ -230,10 +230,13 @@ public class Course {
         }
     }
 
-    /** 코스의 출발 기준점 — 1번 아이템 거리를 재는 시작 지역 중심 좌표 */
-    public DistrictCenter startPoint() {
-        String startArea = intent != null ? intent.startArea() : null;
-        return DistrictCenter.of(startArea)
+    /**
+     * 코스의 출발 기준점 — 1번 아이템 거리를 재는 좌표.
+     * 생성 때 "X 근처"의 X를 찾았으면 그 좌표, 아니면 시작 지역 중심 (생성 시 검색 중심과 같은 규칙).
+     */
+    public GeoPoint startPoint() {
+        if (intent == null) throw new BusinessException(CourseErrorCode.UNKNOWN_START_AREA);
+        return intent.center()
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.UNKNOWN_START_AREA));
     }
 

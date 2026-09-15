@@ -54,6 +54,20 @@ public class SpotRepositoryImpl implements SpotsRepository {
     }
 
     @Override
+    public List<Spot> findActiveByTitleNear(String title, double lat, double lon, int limit) {
+        String compact = title == null ? "" : title.replace(" ", "").strip();
+        if (compact.isEmpty() || limit <= 0) return List.of();
+        return jpaRepository.findActiveByTitleNear(escapeLike(compact), lat, lon, limit).stream()
+                .map(SpotEntity::toDomain)
+                .toList();
+    }
+
+    /** LIKE 와일드카드가 사용자 입력에 섞여 들어와도 리터럴로 비교되게 이스케이프한다 (PostgreSQL 기본 이스케이프 문자는 \) */
+    private static String escapeLike(String keyword) {
+        return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    @Override
     public List<Spot> findByIdsOrderByDistance(List<String> contentIds, double lat, double lon) {
         if (contentIds.isEmpty()) return List.of();
         return jpaRepository.findByIdsOrderByDistance(contentIds, lat, lon).stream()
@@ -72,4 +86,4 @@ public class SpotRepositoryImpl implements SpotsRepository {
         }
         return result;
     }
-}
+}

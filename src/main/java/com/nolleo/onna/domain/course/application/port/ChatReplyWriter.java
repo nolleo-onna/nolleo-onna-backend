@@ -1,6 +1,9 @@
 package com.nolleo.onna.domain.course.application.port;
 
+import com.nolleo.onna.domain.course.application.dto.PendingChoice;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
+
+import java.util.List;
 
 /**
  * [아웃바운드 포트] 챗봇 응답 문구 생성.
@@ -11,14 +14,20 @@ public interface ChatReplyWriter {
     /** 여행 코스 요청과 무관한 메시지일 때 — 서비스 안내 후 리다이렉트 */
     String offTopic();
 
-    /** 시작 지역이 없을 때 — 지역 되묻기 */
-    String askStartArea();
+    /** 시작 지역이 없을 때 — 지역 되묻기. 기준점("X 근처")을 말했는데 못 찾은 경우 그 사실도 함께 알린다 */
+    String askStartArea(CourseIntent intent);
 
     /** 선택 필드(예산·동행·분위기)가 전부 없을 때 — 묶어서 1회 되묻기 */
     String askPreferences(CourseIntent intent);
 
     /** 필수·선택 정보가 모두 모였을 때 — 지금까지 파악한 조건으로 생성해도 될지 확인 */
     String confirmGenerate(CourseIntent intent);
+
+    /**
+     * 기준점·꼭 넣을 곳의 이름 매칭 후보가 여러 개일 때 — 항목별 후보를 번호로 보여주고 골라달라고 묻는다.
+     * 고정 형식(AI 호출 없음) — 후보 목록을 AI가 바꿔 말하면 안 된다.
+     */
+    String askChoices(List<PendingChoice> choices);
 
     /** 생성 완료 안내 */
     String ready(CourseIntent intent);
