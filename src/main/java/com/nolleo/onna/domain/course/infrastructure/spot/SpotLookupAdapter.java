@@ -38,6 +38,14 @@ public class SpotLookupAdapter implements SpotLookupPort {
     }
 
     @Override
+    public List<SpotCandidate> findActiveByTitleNear(String title, double lat, double lon, int limit) {
+        // 정렬(정확 일치 → 거리)은 DB가 끝내므로 순서를 그대로 넘긴다
+        return spotsRepository.findActiveByTitleNear(title, lat, lon, limit).stream()
+                .map(SpotLookupAdapter::toCandidate)
+                .toList();
+    }
+
+    @Override
     public Map<String, SpotCandidate> findByIds(List<String> contentIds) {
         if (contentIds.isEmpty()) return Map.of();
         return spotsRepository.findByIds(contentIds).stream()

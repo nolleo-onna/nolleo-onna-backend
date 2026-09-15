@@ -30,11 +30,13 @@ import java.util.UUID;
  *      연속 상한에 도달하면 대화 종료(CONVERSATION_ENDED)
  *   4. 생성 확인 대기 중이었다면: "코스 생성 시작" 문구가 정확히 있을 때만 대화 상태를 원자적으로 가져가(take)
  *      일일 생성 횟수 확인 후 즉시 생성 — 턴 상한과 무관하게 허용한다(대화의 목적이므로)
- *   5. 그 외에는 기존 intent와 병합 후 분기:
+ *   5. 그 외에는 기존 intent와 병합하고, "X 근처"의 X(기준점)를 행사 → 스팟 데이터에서 찾아 좌표·시작 지역을 채운 뒤,
+ *      검색 중심이 정해졌으면 이름으로 지정한 장소도 실제 스팟과 맞춘다 (정확 일치·단일 결과만, 아니면 못 찾은 것으로 안내)
+ *   6. 분기:
  *      - 턴 상한 초과                  → CONVERSATION_ENDED (대화 상태 삭제, 새 대화 안내)
- *      - startArea 없음                → NEED_MORE_INFO (지역 되묻기)
- *      - 선택필드 전부 없음 & 첫 되묻기     → NEED_MORE_INFO (선호 되묻기, 1회만. 마지막 턴이면 건너뛴다)
- *      - 그 외                        → NEED_MORE_INFO (생성 확인 질문 + "코스 생성 시작" 문구 안내, awaitingConfirmation=true)
+ *      - startArea 없음                → NEED_MORE_INFO (지역 되묻기. 기준점을 못 찾았으면 그 사실도 알린다)
+ *      - 선택필드 전부 없음 & 첫 되묻기     → NEED_MORE_INFO (선호 되묻기, 1회만. 마지막 턴이면 건너뛴다. 매칭 결과 요약을 붙인다)
+ *      - 그 외                        → NEED_MORE_INFO (생성 확인 질문 + 매칭 결과 안내 + "코스 생성 시작" 문구 안내, awaitingConfirmation=true)
  *
  * 비용 상한(ChatLimitPolicy)은 사용자에게 보이는 한도가 아니라 안전장치다 — 정상 사용에서는 걸리지 않는 값이어야 한다.
  */
@@ -52,6 +54,8 @@ public class CourseChatService {
     private final CourseGenerationLimiter generationLimiter;
     private final ChatMessageLimiter messageLimiter;
     private final CourseGenerationService courseGenerationService;
+    private final SpotPinResolver spotPinResolver;
+    private final CourseAnchorResolver anchorResolver;
     private final ChatLimitPolicy policy;
 
     public ChatResult chat(Long userId, String message, String conversationId) {
@@ -87,8 +91,14 @@ public class CourseChatService {
             return generate(userId, activeConversationId, previous);
         }
 
-        // 5. 병합
+        // 5. 병합 → 기준점("X 근처") 찾기 → 지정 장소 매칭.
+        //    기준점은 행사·스팟 데이터에서 좌표를 찾으면 시작 지역도 그 좌표에서 계산해 채운다.
+        //    지정 장소는 검색 중심이 정해진 뒤에만 맞출 수 있다 — 확인 단계보다 먼저 맞춰 되묻기 문구에서도 결과를 보여준다
         CourseIntent intent = (previousIntent != null) ? previousIntent.merge(parsed.intent()) : parsed.intent();
+        intent = anchorResolver.resolve(intent);
+        if (intent.center().isPresent()) {
+            intent = spotPinResolver.resolve(intent);
+        }
 
         // 턴 상한 초과 — 트리거가 아닌 메시지는 더 받지 않는다. 마지막 턴에서 이미 확인을 물었으니 남은 선택지는 생성뿐이었다
         if (turn > policy.maxTurnsPerConversation()) {
@@ -99,8 +109,9 @@ public class CourseChatService {
 
         // 6. 분기
         if (!intent.canGenerate()) {
+            // 기준점을 말했는데 못 찾은 경우도 여기로 온다 — 되묻기 문구에서 "찾지 못했다"고 함께 알린다
             conversationStore.save(activeConversationId, ConversationState.of(intent, false, turn));
-            return ChatResult.needMoreInfo(replyWriter.askStartArea(), activeConversationId, intent);
+            return ChatResult.needMoreInfo(replyWriter.askStartArea(intent), activeConversationId, intent);
         }
 
         // 마지막 턴이면 선호 되묻기를 건너뛴다 — 되물어도 답할 턴이 없다. 지금 조건으로 생성 확인부터 받는다
@@ -110,7 +121,8 @@ public class CourseChatService {
             return ChatResult.needMoreInfo(replyWriter.askPreferences(clarified), activeConversationId, clarified);
         }
 
-        // 생성에 필요한 정보는 모두 모였음 — 바로 생성하지 않고 확인부터
+        // 생성에 필요한 정보는 모두 모였음 — 바로 생성하지 않고 확인부터.
+        // 매칭 결과(contentId)는 대화 상태에 남겨 생성 때 재조회하지 않는다
         conversationStore.save(activeConversationId, ConversationState.of(intent, true, turn));
         return ChatResult.needMoreInfo(replyWriter.confirmGenerate(intent), activeConversationId, intent);
     }

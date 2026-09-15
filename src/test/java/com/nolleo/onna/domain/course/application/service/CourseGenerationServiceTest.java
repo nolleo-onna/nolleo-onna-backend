@@ -13,18 +13,22 @@ import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.GenerationMode;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotHints;
+import com.nolleo.onna.domain.course.domain.model.vo.SpotPin;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
+import com.nolleo.onna.domain.course.domain.model.vo.CourseAnchor;
+import com.nolleo.onna.domain.course.domain.model.vo.GeoPoint;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -49,7 +53,14 @@ class CourseGenerationServiceTest {
     @Mock CourseContentWriter courseContentWriter;
     @Mock CourseRepository courseRepository;
 
-    @InjectMocks CourseGenerationService service;
+    private CourseGenerationService service;
+
+    @BeforeEach
+    void setUp() {
+        // SpotPinResolver는 실제 객체 — 같은 spotLookupPort 목을 쓰므로 이름 검색 스텁은 한 곳에서 관리된다
+        service = new CourseGenerationService(spotLookupPort, spotReranker, courseContentWriter, courseRepository,
+                new SpotPinResolver(spotLookupPort));
+    }
 
     // 픽스처 — 광안리 중심(35.1531, 129.1187) 기준. SpotCandidate는 mapX=경도, mapY=위도.
 
@@ -81,6 +92,20 @@ class CourseGenerationServiceTest {
         return new CourseIntent("광안리", nearbyAllowed, null, companion, mood,
                 new SlotHints(food, 0, attraction, 0), false);
     }
+
+    /** 사용자가 이름으로 지정한 포함·제외 장소가 있는 intent — 아직 매칭하지 않은(미해결) 지정 */
+    private static CourseIntent intentWithPins(int food, int attraction, List<String> include, List<String> exclude) {
+        return intentWithResolvedPins(food, attraction,
+                include.stream().map(SpotPin::of).toList(), exclude.stream().map(SpotPin::of).toList());
+    }
+
+    private static CourseIntent intentWithResolvedPins(int food, int attraction, List<SpotPin> include, List<SpotPin> exclude) {
+        return new CourseIntent("광안리", false, null, null, List.of(),
+                new SlotHints(food, 0, attraction, 0), false, include, exclude);
+    }
+
+    private static final SpotCandidate BEACH = spot("beach", "NA", 35.1532, 129.1188);      // 광안리해수욕장, 관광지
+    private static final SpotCandidate HAEUNDAE = spot("haeundae", "NA", 35.1587, 129.1604); // 해운대해수욕장, 관광지
 
     private void stubSaveReturnsArgument() {
         given(courseRepository.save(any(Course.class))).willAnswer(inv -> inv.getArgument(0));
@@ -329,5 +354,169 @@ class CourseGenerationServiceTest {
 
         // then — nature1은 포함되지 않는다
         verify(spotLookupPort).findFoodPrices(List.of("food1"));
+    }
+
+    // ── 사용자가 이름으로 지정한 포함·제외 스팟 ────────────────────────────────
+
+    @Test
+    @DisplayName("꼭 넣어달라고 한 스팟은 이름으로 찾아 코스에 담고, 그 카테고리 그룹의 슬롯을 하나 차지한다")
+    void generate_includesPinnedSpot_andItTakesAGroupSlot() {
+        // given — 관광지 1곳을 원하는데 광안리 해수욕장을 지정 → 관광지 그룹은 조회조차 하지 않는다
+        given(spotLookupPort.findActiveByTitleNear(eq("광안리 해수욕장"), eq(GWANGAN_LAT), eq(GWANGAN_LON), anyInt())).willReturn(List.of(BEACH));
+        given(spotLookupPort.findActiveByIds(List.of("beach"))).willReturn(Map.of("beach", BEACH));
+        stubFoodPool(List.of(FOOD_NEAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intentWithPins(1, 1, List.of("광안리 해수욕장"), List.of()), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef)
+                .containsExactlyInAnyOrder(PlaceRef.spot("beach"), PlaceRef.spot("food1"));
+        verify(spotLookupPort, never()).findNearbyByCategories(eq(ATTRACTION_GROUP), anyDouble(), anyDouble(), anyDouble(), anyInt());
+    }
+
+    @Test
+    @DisplayName("지정 스팟이 원하는 개수보다 많아도 전부 담고, 남은 슬롯이 없으면 그 그룹은 추가로 고르지 않는다")
+    void generate_pinnedSpotsCanExceedGroupCount() {
+        // given — 관광지 1곳 요청 + 관광지 2곳 지정
+        given(spotLookupPort.findActiveByTitleNear(eq("광안리 해수욕장"), eq(GWANGAN_LAT), eq(GWANGAN_LON), anyInt())).willReturn(List.of(BEACH));
+        given(spotLookupPort.findActiveByTitleNear(eq("해운대 해수욕장"), eq(GWANGAN_LAT), eq(GWANGAN_LON), anyInt())).willReturn(List.of(HAEUNDAE));
+        given(spotLookupPort.findActiveByIds(List.of("beach", "haeundae"))).willReturn(Map.of("beach", BEACH, "haeundae", HAEUNDAE));
+        given(spotLookupPort.findFoodPrices(List.of())).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intentWithPins(0, 1, List.of("광안리 해수욕장", "해운대 해수욕장"), List.of()), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef)
+                .containsExactlyInAnyOrder(PlaceRef.spot("beach"), PlaceRef.spot("haeundae"));
+        verify(spotLookupPort, never()).findNearbyByCategories(anyList(), anyDouble(), anyDouble(), anyDouble(), anyInt());
+    }
+
+    @Test
+    @DisplayName("빼달라고 한 스팟은 이름으로 찾아 후보 풀에서 걸러낸다 — 거리순 1위여도 선택되지 않는다")
+    void generate_excludesSpotByName() {
+        // given — 풀은 [food1, food2], food1(=이름으로 찾은 스팟)을 제외 → food2 선택
+        given(spotLookupPort.findActiveByTitleNear(eq("food1명"), eq(GWANGAN_LAT), eq(GWANGAN_LON), anyInt())).willReturn(List.of(FOOD_NEAR));
+        given(spotLookupPort.findActiveByIds(List.of("food1"))).willReturn(Map.of("food1", FOOD_NEAR));
+        stubFoodPool(List.of(FOOD_NEAR, FOOD_FAR));
+        given(spotLookupPort.findFoodPrices(List.of("food2"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intentWithPins(1, 0, List.of(), List.of("food1명")), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food2"));
+    }
+
+    @Test
+    @DisplayName("이름에 맞는 스팟이 없으면 그 지정은 건너뛰고 나머지로 정상 생성한다")
+    void generate_skipsUnresolvedPinnedName() {
+        // given
+        given(spotLookupPort.findActiveByTitleNear(eq("없는 장소"), eq(GWANGAN_LAT), eq(GWANGAN_LON), anyInt())).willReturn(List.of());
+        given(spotLookupPort.findActiveByTitleNear(eq("또 없는 장소"), eq(GWANGAN_LAT), eq(GWANGAN_LON), anyInt())).willReturn(List.of());
+        stubFoodPool(List.of(FOOD_NEAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intentWithPins(1, 0, List.of("없는 장소"), List.of("또 없는 장소")), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food1"));
+    }
+
+    @Test
+    @DisplayName("같은 스팟이 포함과 제외 양쪽으로 풀리면 제외가 이긴다 (이름은 달라도 같은 스팟인 경우)")
+    void generate_excludeWins_whenSameSpotResolvedOnBothSides() {
+        // given — "광안리 해수욕장"과 "광안리해변"이 같은 스팟으로 풀림
+        given(spotLookupPort.findActiveByTitleNear(eq("광안리 해수욕장"), eq(GWANGAN_LAT), eq(GWANGAN_LON), anyInt())).willReturn(List.of(BEACH));
+        given(spotLookupPort.findActiveByTitleNear(eq("광안리해변"), eq(GWANGAN_LAT), eq(GWANGAN_LON), anyInt())).willReturn(List.of(BEACH));
+        given(spotLookupPort.findActiveByIds(List.of("beach"))).willReturn(Map.of("beach", BEACH));
+        stubAttractionPool(List.of(NATURE));
+        given(spotLookupPort.findFoodPrices(List.of())).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intentWithPins(0, 1, List.of("광안리 해수욕장"), List.of("광안리해변")), "AI_CHAT");
+
+        // then — beach는 빠지고 관광지 슬롯은 풀에서 채운다
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("nature1"));
+    }
+
+    @Test
+    @DisplayName("확인 단계에서 이미 매칭된 지정은 contentId로 일괄 조회하고 이름 검색을 다시 하지 않는다")
+    void generate_usesStoredContentId_forResolvedPins() {
+        // given — 포함·제외 모두 해결된 pin
+        given(spotLookupPort.findActiveByIds(List.of("beach"))).willReturn(Map.of("beach", BEACH));
+        given(spotLookupPort.findActiveByIds(List.of("food1"))).willReturn(Map.of("food1", FOOD_NEAR));
+        stubFoodPool(List.of(FOOD_NEAR, FOOD_FAR));
+        given(spotLookupPort.findFoodPrices(List.of("food2"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intentWithResolvedPins(1, 1,
+                List.of(new SpotPin("광안리 바다", "beach", "광안리해수욕장")),
+                List.of(new SpotPin("food1명", "food1", "food1명"))), "AI_CHAT");
+
+        // then — beach 포함, food1 제외 → food2
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef)
+                .containsExactlyInAnyOrder(PlaceRef.spot("beach"), PlaceRef.spot("food2"));
+        verify(spotLookupPort, never()).findActiveByTitleNear(anyString(), anyDouble(), anyDouble(), anyInt());
+    }
+
+    @Test
+    @DisplayName("매칭해 둔 스팟이 그 사이 비활성화됐으면 건너뛰고 그 슬롯은 후보 풀에서 채운다")
+    void generate_skipsResolvedPin_whenNoLongerActive() {
+        // given
+        given(spotLookupPort.findActiveByIds(List.of("beach"))).willReturn(Map.of());
+        stubAttractionPool(List.of(NATURE));
+        given(spotLookupPort.findFoodPrices(List.of())).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intentWithResolvedPins(0, 1,
+                List.of(new SpotPin("광안리 바다", "beach", "광안리해수욕장")), List.of()), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("nature1"));
+    }
+
+    // ── 기준점 ("X 근처") ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("기준점이 찾아져 있으면 지역 중심이 아니라 기준점 좌표를 검색 중심으로 쓴다")
+    void generate_usesAnchorPoint_asSearchCenter() {
+        // given — 광안리로 분류된 intent지만 기준점(행사장)은 해운대 쪽 좌표
+        GeoPoint venue = new GeoPoint(35.1587, 129.1604);
+        CourseAnchor anchor = CourseAnchor.of("부산국제항만컨퍼런스")
+                .resolvedTo(CourseAnchor.AnchorSource.EVENT, "ev1", "부산국제항만컨퍼런스", venue, "10.14~10.16");
+        CourseIntent intent = new CourseIntent("광안리", false, null, null, List.of(),
+                new SlotHints(1, 0, 0, 0), false, List.of(), List.of(), anchor);
+        given(spotLookupPort.findNearbyByCategories(eq(FOOD_GROUP), eq(venue.latitude()), eq(venue.longitude()), anyDouble(), anyInt()))
+                .willReturn(List.of(FOOD_NEAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intent, "AI_CHAT");
+
+        // then — 후보 조회 중심이 기준점 좌표이고, 첫 구간 거리도 기준점 기준이다
+        verify(spotLookupPort).findNearbyByCategories(FOOD_GROUP, venue.latitude(), venue.longitude(),
+                CourseGenerationService.SEARCH_RADIUS_M, POOL_SIZE);
+        assertThat(saved.getItems()).hasSize(1);
+        assertThat(saved.startPoint()).isEqualTo(venue);
     }
 }
