@@ -29,6 +29,24 @@ public class GeminiReplyWriter implements ChatReplyWriter {
         return "저는 부산 여행 코스를 추천해드리는 챗봇이에요! 어디로 떠나고 싶으신가요? 😊";
     }
 
+    /** 대화당 턴 상한 — 고정 문구. 종료 안내는 AI에 맡기지 않는다(비용·문구 일관성) */
+    @Override
+    public String turnLimitReached() {
+        return "대화가 길어져서 여기서 마칠게요. 새 대화에서 지역·동행·분위기를 한 번에 말씀해주시면 바로 만들어드릴게요! 🙏";
+    }
+
+    /** 여행 무관 메시지 연속 상한 — 고정 문구 */
+    @Override
+    public String offTopicLimitReached() {
+        return "여행 코스 이야기가 이어지지 않아 대화를 마칠게요. 새 대화에서 부산 어디로 떠날지 알려주세요! 😊";
+    }
+
+    /** 일일 메시지 상한 — 고정 문구 */
+    @Override
+    public String messageLimitReached(int dailyLimit) {
+        return "오늘 챗봇에 보낼 수 있는 메시지 수(하루 " + dailyLimit + "개)를 모두 사용하셨어요. 내일 다시 이용해주세요!";
+    }
+
     /** startArea가 없을 때 — 지역 되묻기 */
     @Override
     public String askStartArea() {

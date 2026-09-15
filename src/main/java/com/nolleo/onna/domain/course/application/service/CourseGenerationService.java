@@ -8,6 +8,7 @@ import com.nolleo.onna.domain.course.application.port.SpotReranker;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.DistrictCenter;
 import com.nolleo.onna.domain.course.domain.model.vo.PlaceRef;
 import com.nolleo.onna.domain.course.domain.model.vo.SlotPlan;
@@ -18,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,6 +101,12 @@ public class CourseGenerationService {
                 .toList();
 
         List<CourseAssembler.AssembledItem> assembled = CourseAssembler.assemble(lat, lon, waypoints);
+        if (assembled.isEmpty()) {
+            // 반경 안에 활성 스팟이 하나도 없다 — 빈 코스를 저장하지 않고 사용자에게 조건 변경을 안내한다
+            throw new BusinessException(CourseErrorCode.NO_SPOT_CANDIDATES);
+        }
+        // 편집 경로와 같은 불변식(최대 개수·중복 금지) — 규칙은 CoursePlaces 한 곳에만 있다
+        new CoursePlaces(assembled.stream().map(item -> PlaceRef.spot(item.waypoint().refId())).toList());
 
         List<String> foodContentIds = assembled.stream()
                 .map(item -> selected.get(item.waypoint().refId()))
@@ -163,20 +171,25 @@ public class CourseGenerationService {
                 .toList();
         if (pool.isEmpty()) return;
 
-        List<SpotCandidate> chosen;
-        if (ranker != null) {
-            List<String> poolIds = pool.stream().map(SpotCandidate::contentId).toList();
-            List<String> rankedIds = ranker.rerank(poolIds);
-            Map<String, SpotCandidate> poolByContentId = new LinkedHashMap<>();
-            pool.forEach(spot -> poolByContentId.put(spot.contentId(), spot));
-            chosen = rankedIds.stream()
-                    .map(poolByContentId::get)
-                    .filter(Objects::nonNull)
-                    .limit(count)
-                    .toList();
-        } else {
-            chosen = pool.stream().limit(count).toList();
+        List<SpotCandidate> ordered = ranker != null ? rerank(pool, ranker) : pool;
+        ordered.stream().limit(count).forEach(spot -> selected.put(spot.contentId(), spot));
+    }
+
+    /**
+     * 후보 풀을 리랭킹 순서로 재배열한다.
+     * 리랭킹 결과에 없는 후보(임베딩 미적재 등)는 버리지 않고 거리순 그대로 뒤에 이어 붙인다 —
+     * 조용히 탈락시키면 요청한 개수보다 적은 코스가 나온다.
+     */
+    private static List<SpotCandidate> rerank(List<SpotCandidate> pool, SpotReranker.Ranker ranker) {
+        Map<String, SpotCandidate> remaining = new LinkedHashMap<>();
+        pool.forEach(spot -> remaining.put(spot.contentId(), spot));
+
+        List<SpotCandidate> ordered = new ArrayList<>(pool.size());
+        for (String contentId : ranker.rerank(List.copyOf(remaining.keySet()))) {
+            SpotCandidate spot = remaining.remove(contentId);
+            if (spot != null) ordered.add(spot);
         }
-        chosen.forEach(spot -> selected.put(spot.contentId(), spot));
+        ordered.addAll(remaining.values());
+        return ordered;
     }
 }

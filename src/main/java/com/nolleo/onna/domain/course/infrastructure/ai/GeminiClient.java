@@ -10,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
@@ -73,6 +74,10 @@ public class GeminiClient {
         } catch (HttpStatusCodeException e) {
             log.error("Gemini API HTTP {} 오류 | 응답: {}", e.getStatusCode(), e.getResponseBodyAsString());
             throw new GeminiApiException("Gemini API 오류: " + e.getStatusCode(), e);
+        } catch (RestClientException e) {
+            // 연결 실패·타임아웃(ResourceAccessException) 등 HTTP 상태코드가 없는 실패 — 호출자가 같은 예외로 폴백/변환할 수 있게 감싼다
+            log.error("Gemini API 호출 실패: {}", e.getMessage());
+            throw new GeminiApiException("Gemini API 호출 실패", e);
         }
     }
 

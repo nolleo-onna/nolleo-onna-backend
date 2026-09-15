@@ -124,6 +124,29 @@ class CourseTest {
         assertThat(course.getTitle()).isEqualTo("광안리 데이트");
     }
 
+    @Test
+    @DisplayName("applyAiContent는 AI가 준 긴 제목·소개를 거부하지 않고 편집 경로와 같은 상한으로 잘라 넣는다")
+    void applyAiContent_truncatesToLimits() {
+        Course course = aiCourse();
+        String longTitle = "제".repeat(Course.MAX_TITLE_LENGTH + 10);
+        String longDescription = "소".repeat(Course.MAX_DESCRIPTION_LENGTH + 10);
+
+        course.applyAiContent("  " + longTitle + "  ", "  " + longDescription + "  ");
+
+        assertThat(course.getTitle()).hasSize(Course.MAX_TITLE_LENGTH);
+        assertThat(course.getDescription()).hasSize(Course.MAX_DESCRIPTION_LENGTH);
+    }
+
+    @Test
+    @DisplayName("applyAiContent는 비어 있는 소개를 null로 정규화한다")
+    void applyAiContent_normalizesBlankDescriptionToNull() {
+        Course course = aiCourse();
+
+        course.applyAiContent("광안리 데이트", "   ");
+
+        assertThat(course.getDescription()).isNull();
+    }
+
     // ── replaceItems (코스 수정 · Full State Replacement) ─────────────────────
 
     private static final double START_LAT = DistrictCenter.GWANGAN.getLatitude();

@@ -261,6 +261,40 @@ class CourseGenerationServiceTest {
     }
 
     @Test
+    @DisplayName("리랭킹 결과에 빠진 후보(임베딩 미적재)는 버리지 않고 거리순으로 뒤에 이어 붙여 요청 개수를 채운다")
+    void generate_fillsFromPoolOrder_whenRerankResultIsShort() {
+        // given — 풀은 [food1, food2], 리랭킹은 food2 하나만 돌려줌. 2개를 요청했으니 food1이 뒤에 붙어야 한다
+        stubFoodPool(List.of(FOOD_NEAR, FOOD_FAR));
+        given(spotReranker.prepare("로맨틱 연인 여행")).willReturn(ranker);
+        given(ranker.rerank(List.of("food1", "food2"))).willReturn(List.of("food2"));
+        given(spotLookupPort.findFoodPrices(anyList())).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intent(2, 0, List.of("로맨틱"), "연인"), "AI_CHAT");
+
+        // then — 둘 다 담긴다 (방문 순서는 최근접 탐욕이 정한다)
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef)
+                .containsExactlyInAnyOrder(PlaceRef.spot("food2"), PlaceRef.spot("food1"));
+    }
+
+    @Test
+    @DisplayName("반경 안에 후보가 하나도 없으면 빈 코스를 저장하지 않고 NO_SPOT_CANDIDATES로 거절한다")
+    void generate_throws_whenNoCandidates() {
+        // given
+        stubFoodPool(List.of());
+        stubAttractionPool(List.of());
+
+        // when / then
+        assertThatThrownBy(() -> service.generate(1L, intent(1, 1, List.of(), null), "AI_CHAT"))
+                .isInstanceOf(BusinessException.class)
+                .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.NO_SPOT_CANDIDATES);
+
+        verifyNoInteractions(courseRepository, courseContentWriter);
+    }
+
+    @Test
     @DisplayName("같은 스팟이 여러 카테고리 풀에 나와도 코스에는 한 번만 담긴다")
     void generate_deduplicatesAcrossGroups() {
         // given — FD와 NA 풀에 같은 contentId

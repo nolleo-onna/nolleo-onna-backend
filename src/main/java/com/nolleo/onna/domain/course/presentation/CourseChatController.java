@@ -43,6 +43,9 @@ public class CourseChatController {
                     - 생성 확인 후 "코스 생성 시작" 문구가 있으면 코스 생성 파이프라인을 실행하고
                       COMPLETED + pairId 반환.
                     - 하루 최대 3회까지만 생성 가능하며, 초과 시 LIMIT_EXCEEDED 반환.
+                    - 비용 안전장치: 한 대화의 메시지 수가 상한(기본 10)을 넘거나 여행 무관 메시지가 연속(기본 3회)되면
+                      CONVERSATION_ENDED 반환 — 그 conversationId는 종료되었으니 새 대화(conversationId=null)로 시작한다.
+                      하루 메시지 수 상한(기본 40)을 넘으면 MESSAGE_LIMIT_EXCEEDED 반환 (파싱 전 거절, intent 비어 있음).
                     - intent 필드는 검증용으로 현재까지 파싱된 상태를 보여준다.
                     """
     )
