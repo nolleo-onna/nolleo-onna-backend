@@ -5,7 +5,6 @@ import com.nolleo.onna.domain.course.application.ChatLimitPolicy;
 import com.nolleo.onna.domain.course.application.dto.ChatResult;
 import com.nolleo.onna.domain.course.application.dto.ConversationState;
 import com.nolleo.onna.domain.course.application.dto.ParsedMessage;
-import com.nolleo.onna.domain.course.application.dto.PendingChoice;
 import com.nolleo.onna.domain.course.application.port.ChatMessageLimiter;
 import com.nolleo.onna.domain.course.application.port.ChatReplyWriter;
 import com.nolleo.onna.domain.course.application.port.ConversationStore;
@@ -18,8 +17,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -27,21 +24,18 @@ import java.util.UUID;
  *
  * 흐름:
  *   0. 일일 메시지 상한 확인 — 파싱(Gemini 호출) 전에 거절해 초과 메시지는 비용을 쓰지 않는다
- *   1. 이전 대화 상태(부분 intent + 생성 확인 대기 여부 + 카운터 + 후보 선택 대기) 조회 — conversationId 기준
+ *   1. 이전 대화 상태(부분 intent + 생성 확인 대기 여부 + 카운터) 조회 — conversationId 기준
  *   2. 이번 메시지를 Gemini로 파싱
  *   3. 여행 무관 메시지면 OFF_TOPIC 반환 (intent는 병합하지 않고 카운터만 올린다).
  *      연속 상한에 도달하면 대화 종료(CONVERSATION_ENDED)
  *   4. 생성 확인 대기 중이었다면: "코스 생성 시작" 문구가 정확히 있을 때만 대화 상태를 원자적으로 가져가(take)
  *      일일 생성 횟수 확인 후 즉시 생성 — 턴 상한과 무관하게 허용한다(대화의 목적이므로)
- *   5. 그 외에는 기존 intent와 병합하고,
- *      5-1. 지난 턴에 물어둔 후보 선택이 있으면 이번 메시지에서 읽어 확정한다 (못 읽으면 추천 1순위 — 되묻기가 생성을 막지 않는다)
- *      5-2. "X 근처"의 X(기준점)를 행사 → 스팟 데이터에서 찾아 좌표·시작 지역을 채우고,
- *      5-3. 검색 중심이 정해졌으면 이름으로 지정한 장소도 실제 스팟과 맞춘다.
- *      기준점·꼭 넣을 곳의 후보가 여러 개면 한 턴에 묶어 묻는다 (NEED_MORE_INFO, 뺄 곳은 묻지 않고 전부 뺀다)
+ *   5. 그 외에는 기존 intent와 병합하고, "X 근처"의 X(기준점)를 행사 → 스팟 데이터에서 찾아 좌표·시작 지역을 채운 뒤,
+ *      검색 중심이 정해졌으면 이름으로 지정한 장소도 실제 스팟과 맞춘다 (정확 일치·단일 결과만, 아니면 못 찾은 것으로 안내)
  *   6. 분기:
  *      - 턴 상한 초과                  → CONVERSATION_ENDED (대화 상태 삭제, 새 대화 안내)
  *      - startArea 없음                → NEED_MORE_INFO (지역 되묻기. 기준점을 못 찾았으면 그 사실도 알린다)
- *      - 선택필드 전부 없음 & 첫 되묻기     → NEED_MORE_INFO (선호 되묻기, 1회만. 마지막 턴이면 건너뛴다)
+ *      - 선택필드 전부 없음 & 첫 되묻기     → NEED_MORE_INFO (선호 되묻기, 1회만. 마지막 턴이면 건너뛴다. 매칭 결과 요약을 붙인다)
  *      - 그 외                        → NEED_MORE_INFO (생성 확인 질문 + 매칭 결과 안내 + "코스 생성 시작" 문구 안내, awaitingConfirmation=true)
  *
  * 비용 상한(ChatLimitPolicy)은 사용자에게 보이는 한도가 아니라 안전장치다 — 정상 사용에서는 걸리지 않는 값이어야 한다.
@@ -62,7 +56,6 @@ public class CourseChatService {
     private final CourseGenerationService courseGenerationService;
     private final SpotPinResolver spotPinResolver;
     private final CourseAnchorResolver anchorResolver;
-    private final ChoiceSelector choiceSelector;
     private final ChatLimitPolicy policy;
 
     public ChatResult chat(Long userId, String message, String conversationId) {
@@ -98,22 +91,13 @@ public class CourseChatService {
             return generate(userId, activeConversationId, previous);
         }
 
-        // 5. 병합 → 후보 선택 확정 → 기준점·지정 장소 매칭
+        // 5. 병합 → 기준점("X 근처") 찾기 → 지정 장소 매칭.
+        //    기준점은 행사·스팟 데이터에서 좌표를 찾으면 시작 지역도 그 좌표에서 계산해 채운다.
+        //    지정 장소는 검색 중심이 정해진 뒤에만 맞출 수 있다 — 확인 단계보다 먼저 맞춰 되묻기 문구에서도 결과를 보여준다
         CourseIntent intent = (previousIntent != null) ? previousIntent.merge(parsed.intent()) : parsed.intent();
-        if (previous != null && previous.hasPendingChoices()) {
-            intent = choiceSelector.apply(intent, previous.pendingChoices(), message);
-        }
-
-        List<PendingChoice> choices = new ArrayList<>();
-        CourseAnchorResolver.AnchorResolution anchorResolution = anchorResolver.resolve(intent);
-        intent = anchorResolution.intent();
-        anchorResolution.choice().ifPresent(choices::add);
-
-        // 검색 중심(기준점 좌표 또는 지역 중심)이 정해졌으면 지정 장소도 지금 맞춰 후보 질문을 한 턴에 묶는다
+        intent = anchorResolver.resolve(intent);
         if (intent.center().isPresent()) {
-            SpotPinResolver.PinResolution pinResolution = spotPinResolver.resolve(intent);
-            intent = pinResolution.intent();
-            choices.addAll(pinResolution.choices());
+            intent = spotPinResolver.resolve(intent);
         }
 
         // 턴 상한 초과 — 트리거가 아닌 메시지는 더 받지 않는다. 마지막 턴에서 이미 확인을 물었으니 남은 선택지는 생성뿐이었다
@@ -122,17 +106,6 @@ public class CourseChatService {
             return ChatResult.conversationEnded(replyWriter.turnLimitReached(), activeConversationId, intent);
         }
         boolean lastTurn = turn >= policy.maxTurnsPerConversation();
-
-        // 후보가 여럿인 항목이 있으면 한 번에 묻는다 — 마지막 턴이면 묻지 않고 추천 1순위로 진행한다(답할 턴이 없다)
-        if (!choices.isEmpty() && !lastTurn) {
-            conversationStore.save(activeConversationId, ConversationState.of(intent, false, turn).withPendingChoices(choices));
-            return ChatResult.needMoreInfo(replyWriter.askChoices(choices), activeConversationId, intent);
-        }
-        if (!choices.isEmpty()) {
-            for (PendingChoice choice : choices) {
-                intent = ChoiceSelector.applyChoice(intent, choice, choice.first());
-            }
-        }
 
         // 6. 분기
         if (!intent.canGenerate()) {

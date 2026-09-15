@@ -89,9 +89,8 @@ public class CourseGenerationService {
         double lon = center.longitude();
 
         // 지정 장소 매칭 — 확인 단계에서 이미 끝났으면 그대로, 남은 미해결 지정만 한 번 더 시도한다 (확인을 거치지 않는 경로 대비).
-        // 생성 직전이라 되물을 수 없으므로 후보가 여럿이면 추천 1순위를 쓴다.
         // 매칭 결과가 들어간 intent를 스냅샷으로 저장해 어떤 스팟으로 이해했는지 재현할 수 있게 한다
-        CourseIntent intent = spotPinResolver.resolveOrDefault(rawIntent);
+        CourseIntent intent = spotPinResolver.resolve(rawIntent);
 
         SlotPlan plan = SlotPlanner.plan(intent.slotHints());
         double radiusM = intent.nearbyAllowed() ? NEARBY_SEARCH_RADIUS_M : SEARCH_RADIUS_M;

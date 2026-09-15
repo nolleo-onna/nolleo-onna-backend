@@ -5,7 +5,6 @@ import com.nolleo.onna.domain.course.application.ChatLimitPolicy;
 import com.nolleo.onna.domain.course.application.dto.ChatResult;
 import com.nolleo.onna.domain.course.application.dto.ConversationState;
 import com.nolleo.onna.domain.course.application.dto.ParsedMessage;
-import com.nolleo.onna.domain.course.application.dto.PendingChoice;
 import com.nolleo.onna.domain.course.application.dto.EventCandidate;
 import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.port.ChatMessageLimiter;
@@ -77,7 +76,6 @@ class CourseChatServiceTest {
         service = new CourseChatService(intentParser, replyWriter, conversationStore, generationLimiter,
                 messageLimiter, courseGenerationService,
                 new SpotPinResolver(spotLookupPort), new CourseAnchorResolver(eventLookupPort, spotLookupPort),
-                new ChoiceSelector(),
                 new ChatLimitPolicy(MAX_TURNS, MAX_OFF_TOPIC_STREAK, DAILY_MESSAGE_LIMIT));
     }
 
@@ -665,162 +663,4 @@ class CourseChatServiceTest {
         }
     }
 
-    // ── 후보 선택 되묻기 ─────────────────────────────────────────────────────
-
-    @Nested
-    @DisplayName("후보 선택 되묻기")
-    class Choices {
-
-        private static final EventCandidate PORT_CONF = new EventCandidate("ev1", "부산국제항만컨퍼런스",
-                BigDecimal.valueOf(129.1604), BigDecimal.valueOf(35.1587),
-                LocalDate.of(2026, 10, 14), LocalDate.of(2026, 10, 16), "벡스코");
-        private static final EventCandidate FILM_FEST = new EventCandidate("ev2", "부산국제영화제",
-                BigDecimal.valueOf(129.1302), BigDecimal.valueOf(35.1690),
-                LocalDate.of(2026, 10, 1), LocalDate.of(2026, 10, 10), "영화의전당");
-        private static final SpotCandidate BEACH = new SpotCandidate("beach", "광안리해수욕장", null, "NA", "자연/공원",
-                BigDecimal.valueOf(129.1188), BigDecimal.valueOf(35.1532));
-        private static final SpotCandidate SONGJEONG = new SpotCandidate("songjeong", "송정해수욕장", null, "NA", "자연/공원",
-                BigDecimal.valueOf(129.2005), BigDecimal.valueOf(35.1785));
-
-        private static CourseIntent anchoredNoArea(String anchorName) {
-            return new CourseIntent(null, false, null, "친구", List.of(), null, false,
-                    List.of(), List.of(), CourseAnchor.of(anchorName));
-        }
-
-        private ConversationState savedState(String conversationId) {
-            ArgumentCaptor<ConversationState> captor = ArgumentCaptor.forClass(ConversationState.class);
-            verify(conversationStore).save(eq(conversationId), captor.capture());
-            return captor.getValue();
-        }
-
-        @Test
-        @DisplayName("'부산국제'처럼 행사 후보가 여러 개면 확정하지 않고 번호로 골라달라고 묻고, 후보를 대화 상태에 저장한다")
-        void chat_asksChoice_whenAnchorAmbiguous() {
-            // given
-            allowMessages();
-            given(conversationStore.find(null)).willReturn(Optional.empty());
-            given(intentParser.parse("부산국제 관련 행사 근처 갈만한 곳")).willReturn(new ParsedMessage(true, anchoredNoArea("부산국제")));
-            given(eventLookupPort.findUpcomingByTitle(eq("부산국제"), anyInt())).willReturn(List.of(PORT_CONF, FILM_FEST));
-            given(replyWriter.askChoices(anyList())).willReturn("🔎 몇 가지만 확인할게요.");
-
-            // when
-            ChatResult result = service.chat(USER_ID, "부산국제 관련 행사 근처 갈만한 곳", null);
-
-            // then
-            assertThat(result.status()).isEqualTo(ChatResult.Status.NEED_MORE_INFO);
-            assertThat(result.reply()).startsWith("🔎");
-            assertThat(result.intent().hasUnresolvedAnchor()).isTrue();
-
-            ConversationState saved = savedState(result.conversationId());
-            assertThat(saved.awaitingConfirmation()).isFalse();
-            assertThat(saved.pendingChoices()).hasSize(1);
-            assertThat(saved.pendingChoices().get(0).kind()).isEqualTo(PendingChoice.Kind.ANCHOR);
-            assertThat(saved.pendingChoices().get(0).candidates()).extracting(PendingChoice.Candidate::contentId)
-                    .containsExactly("ev1", "ev2");
-            verify(replyWriter, never()).askStartArea(any());
-            verify(replyWriter, never()).confirmGenerate(any());
-        }
-
-        @Test
-        @DisplayName("다음 턴에 '2번'을 보내면 그 후보로 기준점을 확정하고 지역을 채워 바로 생성 확인으로 간다")
-        void chat_appliesSelection_thenConfirms() {
-            // given — 지난 턴에 기준점 후보 2개를 물어둔 상태
-            PendingChoice pending = new PendingChoice(PendingChoice.Kind.ANCHOR, "부산국제", List.of(
-                    new PendingChoice.Candidate("ev1", "부산국제항만컨퍼런스", 35.1587, 129.1604, "10.14~10.16", "EVENT"),
-                    new PendingChoice.Candidate("ev2", "부산국제영화제", 35.1690, 129.1302, "10.1~10.10", "EVENT")));
-            ConversationState asked = ConversationState.of(anchoredNoArea("부산국제"), false, 1).withPendingChoices(List.of(pending));
-            allowMessages();
-            given(conversationStore.find(CONVERSATION_ID)).willReturn(Optional.of(asked));
-            given(intentParser.parse("2번")).willReturn(new ParsedMessage(true, CourseIntent.empty()));
-            given(replyWriter.confirmGenerate(any(CourseIntent.class))).willReturn("만들까요?");
-
-            // when
-            ChatResult result = service.chat(USER_ID, "2번", CONVERSATION_ID);
-
-            // then
-            assertThat(result.status()).isEqualTo(ChatResult.Status.NEED_MORE_INFO);
-            assertThat(result.intent().anchor().contentId()).isEqualTo("ev2");
-            assertThat(result.intent().startArea()).isEqualTo("센텀"); // 영화의전당 좌표에 가장 가까운 지원 지역
-            ConversationState saved = savedState(CONVERSATION_ID);
-            assertThat(saved.awaitingConfirmation()).isTrue();
-            assertThat(saved.pendingChoices()).isEmpty();
-            verifyNoInteractions(eventLookupPort); // 저장된 후보로 확정하므로 다시 조회하지 않는다
-        }
-
-        @Test
-        @DisplayName("고르지 않고 다른 조건만 말하면 추천 1순위로 확정하고 진행한다 — 되묻기가 생성을 막지 않는다")
-        void chat_defaultsToFirst_whenNoSelection() {
-            // given
-            PendingChoice pending = new PendingChoice(PendingChoice.Kind.ANCHOR, "부산국제", List.of(
-                    new PendingChoice.Candidate("ev1", "부산국제항만컨퍼런스", 35.1587, 129.1604, "10.14~10.16", "EVENT"),
-                    new PendingChoice.Candidate("ev2", "부산국제영화제", 35.1690, 129.1302, "10.1~10.10", "EVENT")));
-            ConversationState asked = ConversationState.of(anchoredNoArea("부산국제"), false, 1).withPendingChoices(List.of(pending));
-            allowMessages();
-            given(conversationStore.find(CONVERSATION_ID)).willReturn(Optional.of(asked));
-            CourseIntent budgetOnly = new CourseIntent(null, false, 50000, null, List.of(), null, false);
-            given(intentParser.parse("추천대로, 예산 5만원")).willReturn(new ParsedMessage(true, budgetOnly));
-            given(replyWriter.confirmGenerate(any(CourseIntent.class))).willReturn("만들까요?");
-
-            // when
-            ChatResult result = service.chat(USER_ID, "추천대로, 예산 5만원", CONVERSATION_ID);
-
-            // then
-            assertThat(result.intent().anchor().contentId()).isEqualTo("ev1");
-            assertThat(result.intent().budget()).isEqualTo(50000);
-            assertThat(savedState(CONVERSATION_ID).awaitingConfirmation()).isTrue();
-        }
-
-        @Test
-        @DisplayName("꼭 넣을 곳의 후보가 여러 개면 거리와 함께 묻지만, 뺄 곳의 후보는 묻지 않고 전부 뺀다")
-        void chat_asksIncludeChoice_butExcludesAllForExclude() {
-            // given — 지역·동행 있음, '해수욕장' 포함 + '시장' 제외
-            CourseIntent parsed = new CourseIntent("광안리", false, null, "친구", List.of(), null, false,
-                    List.of(SpotPin.of("해수욕장")), List.of(SpotPin.of("시장")));
-            SpotCandidate market1 = new SpotCandidate("m1", "민락어민활어직판장", null, "FD", "음식점/카페",
-                    BigDecimal.valueOf(129.1300), BigDecimal.valueOf(35.1550));
-            SpotCandidate market2 = new SpotCandidate("m2", "광안리시장", null, "FD", "음식점/카페",
-                    BigDecimal.valueOf(129.1150), BigDecimal.valueOf(35.1560));
-            allowMessages();
-            given(conversationStore.find(null)).willReturn(Optional.empty());
-            given(intentParser.parse("광안리에서 친구랑, 해수욕장은 넣고 시장은 빼줘")).willReturn(new ParsedMessage(true, parsed));
-            given(spotLookupPort.findActiveByTitleNear(eq("해수욕장"), anyDouble(), anyDouble(), anyInt())).willReturn(List.of(BEACH, SONGJEONG));
-            given(spotLookupPort.findActiveByTitleNear(eq("시장"), anyDouble(), anyDouble(), anyInt())).willReturn(List.of(market1, market2));
-            given(replyWriter.askChoices(anyList())).willReturn("🔎 몇 가지만 확인할게요.");
-
-            // when
-            ChatResult result = service.chat(USER_ID, "광안리에서 친구랑, 해수욕장은 넣고 시장은 빼줘", null);
-
-            // then
-            assertThat(result.status()).isEqualTo(ChatResult.Status.NEED_MORE_INFO);
-            ConversationState saved = savedState(result.conversationId());
-            assertThat(saved.pendingChoices()).hasSize(1);
-            assertThat(saved.pendingChoices().get(0).kind()).isEqualTo(PendingChoice.Kind.INCLUDE);
-            assertThat(saved.pendingChoices().get(0).candidates().get(0).detail()).matches("\\d+\\.\\dkm");
-            // 뺄 곳은 이미 둘 다 확정되어 있다
-            assertThat(saved.intent().excludeSpots()).extracting(SpotPin::contentId).containsExactly("m1", "m2");
-            assertThat(saved.intent().includeSpots().get(0).isResolved()).isFalse();
-        }
-
-        @Test
-        @DisplayName("마지막 턴에서는 묻지 않고 추천 1순위로 확정해 생성 확인으로 간다 — 답할 턴이 없다")
-        void chat_doesNotAsk_onLastTurn() {
-            // given — 9턴을 쓴 대화에 '해수욕장' 포함 요청 (후보 2개)
-            CourseIntent parsed = new CourseIntent("광안리", false, null, "친구", List.of(), null, false,
-                    List.of(SpotPin.of("해수욕장")), List.of());
-            allowMessages();
-            given(conversationStore.find(CONVERSATION_ID))
-                    .willReturn(Optional.of(ConversationState.of(new CourseIntent("광안리", false, null, "친구", List.of(), null, true), false, MAX_TURNS - 1)));
-            given(intentParser.parse("해수욕장 넣어줘")).willReturn(new ParsedMessage(true, parsed));
-            given(spotLookupPort.findActiveByTitleNear(eq("해수욕장"), anyDouble(), anyDouble(), anyInt())).willReturn(List.of(BEACH, SONGJEONG));
-            given(replyWriter.confirmGenerate(any(CourseIntent.class))).willReturn("만들까요?");
-
-            // when
-            ChatResult result = service.chat(USER_ID, "해수욕장 넣어줘", CONVERSATION_ID);
-
-            // then
-            assertThat(result.intent().includeSpots().get(0).contentId()).isEqualTo("beach");
-            assertThat(savedState(CONVERSATION_ID).awaitingConfirmation()).isTrue();
-            verify(replyWriter, never()).askChoices(anyList());
-        }
-    }
 }

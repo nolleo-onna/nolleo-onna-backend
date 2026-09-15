@@ -1,6 +1,5 @@
 package com.nolleo.onna.domain.course.infrastructure.ai;
 
-import com.nolleo.onna.domain.course.application.dto.PendingChoice;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseAnchor;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.GeoPoint;
@@ -45,7 +44,7 @@ class GeminiReplyWriterTest {
         assertThat(reply)
                 .startsWith("연인과 로맨틱한 광안리 코스, 만들까요?")
                 .contains("📍 꼭 넣을 곳: 광안리해수욕장(광안리 바다) · 뺄 곳: 해운대해수욕장")
-                .contains("⚠️ 찾지 못한 곳: 동백섬 바다 — 정확한 이름을 알려주시면 반영할게요")
+                .contains("⚠️ 찾지 못한 곳: 동백섬 바다 — 정확한 장소 이름을 알려주시면 반영할게요")
                 .endsWith("\"코스 생성 시작\"이라고 정확히 말씀해주시면 바로 만들어드릴게요!");
     }
 
@@ -93,29 +92,6 @@ class GeminiReplyWriterTest {
         String reply = writer.askStartArea(noArea);
 
         assertThat(reply).startsWith("'없는행사'을(를) 행사·장소 데이터에서 찾지 못했어요");
-        org.mockito.Mockito.verifyNoInteractions(geminiClient);
-    }
-
-    @Test
-    @DisplayName("후보 선택 질문은 항목별 후보를 번호·설명과 함께 고정 형식으로 나열하고 AI를 부르지 않는다")
-    void askChoices_listsCandidates_withoutAi() {
-        PendingChoice anchor = new PendingChoice(PendingChoice.Kind.ANCHOR, "부산국제", List.of(
-                new PendingChoice.Candidate("ev1", "부산국제항만컨퍼런스", 35.1, 129.1, "10.14~10.16", "EVENT"),
-                new PendingChoice.Candidate("ev2", "부산국제영화제", 35.1, 129.1, "10.1~10.10", "EVENT")));
-        PendingChoice include = new PendingChoice(PendingChoice.Kind.INCLUDE, "해수욕장", List.of(
-                new PendingChoice.Candidate("beach", "광안리해수욕장", 35.1, 129.1, "0.3km", null),
-                new PendingChoice.Candidate("millak", "민락해변", 35.1, 129.1, null, null)));
-
-        String two = writer.askChoices(List.of(anchor, include));
-        String one = writer.askChoices(List.of(include));
-
-        assertThat(two)
-                .startsWith("🔎 몇 가지만 확인할게요.")
-                .contains("[기준점] '부산국제'  1. 부산국제항만컨퍼런스 (10.14~10.16)  2. 부산국제영화제 (10.1~10.10)")
-                .contains("[꼭 넣을 곳] '해수욕장'  1. 광안리해수욕장 (0.3km)  2. 민락해변")
-                .contains("\"기준점 1, 넣을 곳 2\"처럼")
-                .contains("\"추천대로\"");
-        assertThat(one).contains("\"2번\"처럼 번호나 이름으로");
         org.mockito.Mockito.verifyNoInteractions(geminiClient);
     }
 

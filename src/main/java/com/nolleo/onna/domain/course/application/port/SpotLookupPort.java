@@ -22,7 +22,7 @@ public interface SpotLookupPort {
 
     /**
      * 사용자가 말한 장소명에 맞는 활성 스팟을 "제목 정확 일치 → 기준점에서 가까운 순"으로 최대 limit개 조회.
-     * 공백·대소문자는 무시한다. 호출자가 정확 일치·단일 결과면 확정하고, 여럿이면 사용자에게 고르게 한다.
+     * 공백·대소문자는 무시한다. 호출자가 정확 일치·단일 결과면 확정하고, 여럿이면 못 찾은 것으로 본다.
      */
     List<SpotCandidate> findActiveByTitleNear(String title, double lat, double lon, int limit);
 

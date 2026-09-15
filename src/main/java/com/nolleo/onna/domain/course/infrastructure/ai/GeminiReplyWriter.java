@@ -1,6 +1,5 @@
 package com.nolleo.onna.domain.course.infrastructure.ai;
 
-import com.nolleo.onna.domain.course.application.dto.PendingChoice;
 import com.nolleo.onna.domain.course.application.port.ChatReplyWriter;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseAnchor;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
@@ -123,31 +122,6 @@ public class GeminiReplyWriter implements ChatReplyWriter {
     }
 
     /**
-     * 후보 선택 질문 — 고정 형식 (AI 호출 없음).
-     *   🔎 몇 가지만 확인할게요.
-     *   [기준점] '부산국제'  1. 부산국제항만컨퍼런스 (10.14~10.16)  2. 부산국제영화제 (10.1~10.10)
-     *   [꼭 넣을 곳] '해수욕장'  1. 광안리해수욕장 (0.3km)  2. 민락해변 (1.2km)
-     *   "기준점 1, 넣을 곳 2"처럼 답해주시거나, 그냥 진행하시려면 "추천대로"라고 해주세요.
-     */
-    @Override
-    public String askChoices(List<PendingChoice> choices) {
-        StringBuilder sb = new StringBuilder("🔎 몇 가지만 확인할게요.");
-        for (PendingChoice choice : choices) {
-            sb.append("\n[").append(choice.kind().label()).append("] '").append(choice.name()).append("'");
-            for (int i = 0; i < choice.candidates().size(); i++) {
-                PendingChoice.Candidate candidate = choice.candidates().get(i);
-                sb.append("  ").append(i + 1).append(". ").append(candidate.title());
-                if (candidate.detail() != null) sb.append(" (").append(candidate.detail()).append(")");
-            }
-        }
-        String howToAnswer = choices.size() == 1
-                ? "\"2번\"처럼 번호나 이름으로 답해주시거나"
-                : "\"기준점 1, 넣을 곳 2\"처럼 답해주시거나";
-        sb.append("\n").append(howToAnswer).append(", 그냥 진행하시려면 \"추천대로\"라고 해주세요. (1번이 추천이에요)");
-        return sb.toString();
-    }
-
-    /**
      * 기준점 안내 — 고정 형식.
      *   🎯 부산불꽃축제(제20회 부산불꽃축제, 11.1~11.1) 행사가 있어요 — 이 근처, 광안리 기준으로 만들게요   (행사)
      *   🎯 기준점: 광안리 바다(광안리해수욕장) 근처 · 광안리 기준                                          (스팟)
@@ -189,7 +163,7 @@ public class GeminiReplyWriter implements ChatReplyWriter {
         }
         if (!unresolved.isEmpty()) {
             sb.append("\n⚠️ 찾지 못한 곳: ").append(String.join(", ", unresolved))
-              .append(" — 정확한 이름을 알려주시면 반영할게요");
+              .append(" — 정확한 장소 이름을 알려주시면 반영할게요 (예: 광안리해수욕장)");
         }
         return sb.toString();
     }

@@ -3,7 +3,6 @@ package com.nolleo.onna.domain.course.application.dto;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.SpotPin;
-import com.nolleo.onna.domain.course.application.dto.PendingChoice;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -31,28 +30,6 @@ class ConversationStateTest {
         assertThat(state.awaitingConfirmation()).isTrue();
         assertThat(state.turnCount()).isZero();
         assertThat(state.offTopicStreak()).isZero();
-    }
-
-    @Test
-    @DisplayName("후보 선택 목록이 없던 시절의 JSON도 빈 목록으로 역직렬화되고, 후보가 있으면 왕복에서 보존된다")
-    void pendingChoices_legacyAndRoundTrip() throws Exception {
-        String legacy = """
-                {"intent":{"startArea":"광안리","nearbyAllowed":false,"budget":null,"companion":null,"mood":[],
-                           "slotHints":{},"clarifiedOnce":false},
-                 "awaitingConfirmation":false,"turnCount":2,"offTopicStreak":0}
-                """;
-        assertThat(objectMapper.readValue(legacy, ConversationState.class).pendingChoices()).isEmpty();
-
-        PendingChoice choice = new PendingChoice(PendingChoice.Kind.ANCHOR, "부산국제", List.of(
-                new PendingChoice.Candidate("ev1", "부산국제항만컨퍼런스", 35.1587, 129.1604, "10.14~10.16", "EVENT"),
-                new PendingChoice.Candidate("s1", "부산국제금융센터", 35.1, 129.1, null, "SPOT")));
-        ConversationState asked = ConversationState.of(CourseIntent.empty(), false, 2).withPendingChoices(List.of(choice));
-
-        ConversationState restored = objectMapper.readValue(objectMapper.writeValueAsString(asked), ConversationState.class);
-
-        assertThat(restored).isEqualTo(asked);
-        assertThat(restored.hasPendingChoices()).isTrue();
-        assertThat(restored.pendingChoices().get(0).first().title()).isEqualTo("부산국제항만컨퍼런스");
     }
 
     @Test

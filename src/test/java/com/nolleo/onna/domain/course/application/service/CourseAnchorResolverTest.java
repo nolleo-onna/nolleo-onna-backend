@@ -1,7 +1,6 @@
 package com.nolleo.onna.domain.course.application.service;
 
 import com.nolleo.onna.domain.course.application.dto.EventCandidate;
-import com.nolleo.onna.domain.course.application.dto.PendingChoice;
 import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.port.EventLookupPort;
 import com.nolleo.onna.domain.course.application.port.SpotLookupPort;
@@ -61,38 +60,29 @@ class CourseAnchorResolverTest {
     void resolve_fromEvent_fillsPointAndNearestArea() {
         stubEvents(NAME, EVENT);
 
-        CourseAnchorResolver.AnchorResolution result = resolver.resolve(intent(null, CourseAnchor.of(NAME)));
+        CourseIntent resolved = resolver.resolve(intent(null, CourseAnchor.of(NAME)));
 
-        CourseAnchor anchor = result.intent().anchor();
-        assertThat(result.choice()).isEmpty();
+        CourseAnchor anchor = resolved.anchor();
         assertThat(anchor.isResolved()).isTrue();
         assertThat(anchor.source()).isEqualTo(CourseAnchor.AnchorSource.EVENT);
         assertThat(anchor.point()).isEqualTo(new GeoPoint(35.1587, 129.1604));
         assertThat(anchor.period()).isEqualTo("10.14~10.16");
         assertThat(anchor.displayName()).isEqualTo("부산국제항만컨퍼런스(부산국제항만컨퍼런스 2026, 10.14~10.16)");
-        assertThat(result.intent().startArea()).isEqualTo("해운대");
-        assertThat(result.intent().center()).contains(anchor.point());
+        assertThat(resolved.startArea()).isEqualTo("해운대");
+        assertThat(resolved.center()).contains(anchor.point());
         verifyNoInteractions(spotLookupPort);
     }
 
     @Test
-    @DisplayName("'부산국제'처럼 부분 일치 행사가 여러 개면 확정하지 않고 기간이 붙은 후보 선택지를 돌려준다")
-    void resolve_ambiguousEvents_asksChoice() {
+    @DisplayName("'부산국제'처럼 부분 일치 행사가 여러 개면 확정하지 않고 못 찾은 것으로 둔다 — 스팟으로 넘어가지도 않는다")
+    void resolve_ambiguousEvents_staysUnresolved() {
         stubEvents("부산국제", EVENT, FILM);
 
-        CourseAnchorResolver.AnchorResolution result = resolver.resolve(intent(null, CourseAnchor.of("부산국제")));
+        CourseIntent resolved = resolver.resolve(intent(null, CourseAnchor.of("부산국제")));
 
-        assertThat(result.intent().hasUnresolvedAnchor()).isTrue();
-        assertThat(result.intent().canGenerate()).isFalse();
-        PendingChoice choice = result.choice().orElseThrow();
-        assertThat(choice.kind()).isEqualTo(PendingChoice.Kind.ANCHOR);
-        assertThat(choice.name()).isEqualTo("부산국제");
-        assertThat(choice.candidates()).extracting(PendingChoice.Candidate::title)
-                .containsExactly("부산국제항만컨퍼런스 2026", "부산국제영화제");
-        assertThat(choice.candidates().get(0).detail()).isEqualTo("10.14~10.16");
-        assertThat(choice.candidates().get(0).source()).isEqualTo("EVENT");
-        assertThat(choice.candidates().get(1).latitude()).isEqualTo(35.1690);
-        verifyNoInteractions(spotLookupPort); // 행사 후보가 있으면 스팟은 보지 않는다
+        assertThat(resolved.hasUnresolvedAnchor()).isTrue();
+        assertThat(resolved.canGenerate()).isFalse();
+        verifyNoInteractions(spotLookupPort);
     }
 
     @Test
@@ -104,10 +94,10 @@ class CourseAnchorResolverTest {
         stubEvents("부산불꽃축제 행사 축제");
         stubEvents("부산불꽃축제", fireworks);
 
-        CourseAnchorResolver.AnchorResolution result = resolver.resolve(intent(null, CourseAnchor.of("부산불꽃축제 행사 축제")));
+        CourseIntent resolved = resolver.resolve(intent(null, CourseAnchor.of("부산불꽃축제 행사 축제")));
 
-        assertThat(result.intent().anchor().contentId()).isEqualTo("fw");
-        assertThat(result.intent().startArea()).isEqualTo("광안리");
+        assertThat(resolved.anchor().contentId()).isEqualTo("fw");
+        assertThat(resolved.startArea()).isEqualTo("광안리");
         assertThat(CourseAnchorResolver.keywords("부산불꽃축제 행사 축제")).containsExactly("부산불꽃축제 행사 축제", "부산불꽃축제");
         assertThat(CourseAnchorResolver.keywords("부산불꽃축제")).containsExactly("부산불꽃축제");
         assertThat(CourseAnchorResolver.keywords("축제")).containsExactly("축제"); // 이름 전체가 일반어면 그대로 둔다
@@ -118,10 +108,10 @@ class CourseAnchorResolverTest {
     void resolve_keepsExplicitStartArea() {
         stubEvents(NAME, EVENT);
 
-        CourseAnchorResolver.AnchorResolution result = resolver.resolve(intent("서면", CourseAnchor.of(NAME)));
+        CourseIntent resolved = resolver.resolve(intent("서면", CourseAnchor.of(NAME)));
 
-        assertThat(result.intent().startArea()).isEqualTo("서면");
-        assertThat(result.intent().center()).contains(new GeoPoint(35.1587, 129.1604));
+        assertThat(resolved.startArea()).isEqualTo("서면");
+        assertThat(resolved.center()).contains(new GeoPoint(35.1587, 129.1604));
     }
 
     @Test
@@ -133,18 +123,18 @@ class CourseAnchorResolverTest {
         stubEvents("광안리 바다", noCoords);
         stubSpots("광안리 바다", beach);
 
-        CourseAnchorResolver.AnchorResolution result = resolver.resolve(intent(null, CourseAnchor.of("광안리 바다")));
+        CourseIntent resolved = resolver.resolve(intent(null, CourseAnchor.of("광안리 바다")));
 
-        CourseAnchor anchor = result.intent().anchor();
+        CourseAnchor anchor = resolved.anchor();
         assertThat(anchor.source()).isEqualTo(CourseAnchor.AnchorSource.SPOT);
         assertThat(anchor.period()).isNull();
         assertThat(anchor.displayName()).isEqualTo("광안리 바다(광안리해수욕장)");
-        assertThat(result.intent().startArea()).isEqualTo("광안리");
+        assertThat(resolved.startArea()).isEqualTo("광안리");
     }
 
     @Test
-    @DisplayName("스팟 후보가 여러 개면 역시 선택지로 돌려준다 (출처 SPOT, 기간 없음)")
-    void resolve_ambiguousSpots_asksChoice() {
+    @DisplayName("스팟 후보가 여러 개면 역시 못 찾은 것으로 둔다")
+    void resolve_ambiguousSpots_staysUnresolved() {
         SpotCandidate beach = new SpotCandidate("beach", "광안리해수욕장", null, "NA", "자연/공원",
                 BigDecimal.valueOf(129.1188), BigDecimal.valueOf(35.1532));
         SpotCandidate songjeong = new SpotCandidate("songjeong", "송정해수욕장", null, "NA", "자연/공원",
@@ -152,11 +142,10 @@ class CourseAnchorResolverTest {
         stubEvents("해수욕장");
         stubSpots("해수욕장", beach, songjeong);
 
-        CourseAnchorResolver.AnchorResolution result = resolver.resolve(intent(null, CourseAnchor.of("해수욕장")));
+        CourseIntent resolved = resolver.resolve(intent(null, CourseAnchor.of("해수욕장")));
 
-        PendingChoice choice = result.choice().orElseThrow();
-        assertThat(choice.candidates()).extracting(PendingChoice.Candidate::source).containsOnly("SPOT");
-        assertThat(choice.candidates()).extracting(PendingChoice.Candidate::detail).containsOnlyNulls();
+        assertThat(resolved.hasUnresolvedAnchor()).isTrue();
+        assertThat(resolved.center()).isEmpty();
     }
 
     @Test
@@ -165,12 +154,11 @@ class CourseAnchorResolverTest {
         stubEvents("없는행사");
         stubSpots("없는행사");
 
-        CourseAnchorResolver.AnchorResolution result = resolver.resolve(intent(null, CourseAnchor.of("없는행사")));
+        CourseIntent resolved = resolver.resolve(intent(null, CourseAnchor.of("없는행사")));
 
-        assertThat(result.choice()).isEmpty();
-        assertThat(result.intent().hasUnresolvedAnchor()).isTrue();
-        assertThat(result.intent().canGenerate()).isFalse();
-        assertThat(result.intent().center()).isEmpty();
+        assertThat(resolved.hasUnresolvedAnchor()).isTrue();
+        assertThat(resolved.canGenerate()).isFalse();
+        assertThat(resolved.center()).isEmpty();
     }
 
     @Test
@@ -180,8 +168,8 @@ class CourseAnchorResolverTest {
         CourseIntent alreadyResolved = intent("광안리", CourseAnchor.of(NAME)
                 .resolvedTo(CourseAnchor.AnchorSource.EVENT, "ev1", NAME, new GeoPoint(35.1, 129.1), null));
 
-        assertThat(resolver.resolve(noAnchor).intent()).isSameAs(noAnchor);
-        assertThat(resolver.resolve(alreadyResolved).intent()).isSameAs(alreadyResolved);
+        assertThat(resolver.resolve(noAnchor)).isSameAs(noAnchor);
+        assertThat(resolver.resolve(alreadyResolved)).isSameAs(alreadyResolved);
         verifyNoInteractions(eventLookupPort, spotLookupPort);
     }
 }
