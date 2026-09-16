@@ -1,6 +1,7 @@
 package com.nolleo.onna.domain.course.infrastructure.persistence.repository;
 
 import com.nolleo.onna.domain.course.domain.model.Course;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaceType;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseSort;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,12 +14,15 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 /**
@@ -71,5 +75,34 @@ class CourseRepositoryImplTest {
         assertThat(pageable.getValue().getPageSize()).isEqualTo(9);
         assertThat(orders(pageable.getValue().getSort())).startsWith("likeCount DESC");
         verify(jpaRepository, never()).findWithItemsByIdIn(anyCollection());
+    }
+
+    @Test
+    @DisplayName("findRecentSpotContentIds는 최신순 id를 courseLimit개 뗀 뒤 그 코스들의 SPOT originalId를 집합으로 돌려준다")
+    void findRecentSpotContentIds_twoStep() {
+        given(jpaRepository.findRecentIdsByUserId(eq(7L), any(Pageable.class))).willReturn(List.of(30L, 20L, 10L));
+        given(jpaRepository.findOriginalIdsByCourseIdIn(List.of(30L, 20L, 10L), CoursePlaceType.SPOT))
+                .willReturn(List.of("s1", "s2", "s1"));
+
+        Set<String> result = repository.findRecentSpotContentIds(7L, 5);
+
+        assertThat(result).containsExactlyInAnyOrder("s1", "s2");
+        ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
+        verify(jpaRepository).findRecentIdsByUserId(eq(7L), pageable.capture());
+        assertThat(pageable.getValue().getPageNumber()).isZero();
+        assertThat(pageable.getValue().getPageSize()).isEqualTo(5);
+        assertThat(orders(pageable.getValue().getSort())).containsExactly("createAudit.createdAt DESC", "id DESC");
+    }
+
+    @Test
+    @DisplayName("findRecentSpotContentIds는 코스가 없으면 아이템 조회를 건너뛰고, courseLimit이 0 이하면 조회 자체를 하지 않는다")
+    void findRecentSpotContentIds_skipsWhenNoCourses() {
+        given(jpaRepository.findRecentIdsByUserId(eq(7L), any(Pageable.class))).willReturn(List.of());
+
+        assertThat(repository.findRecentSpotContentIds(7L, 5)).isEmpty();
+        verify(jpaRepository, never()).findOriginalIdsByCourseIdIn(anyCollection(), any());
+
+        assertThat(repository.findRecentSpotContentIds(7L, 0)).isEmpty();
+        verify(jpaRepository, times(1)).findRecentIdsByUserId(eq(7L), any(Pageable.class));
     }
 }
