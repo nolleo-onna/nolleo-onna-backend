@@ -3,6 +3,7 @@ package com.nolleo.onna.domain.course.infrastructure.persistence.repository;
 import com.nolleo.onna.common.exception.BusinessException;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaceType;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseSort;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.infrastructure.persistence.entity.CourseEntity;
@@ -11,10 +12,12 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Repository;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -125,6 +128,19 @@ public class CourseRepositoryImpl implements CourseRepository {
         return jpaRepository.findByUserId(userId).stream()
                 .map(CourseEntity::toDomain)
                 .toList();
+    }
+
+    /**
+     * 2단계 조회 — (1) 최신순 코스 id courseLimit개 (2) 그 코스들의 SPOT 아이템 originalId.
+     * JPQL 서브쿼리에는 LIMIT을 쓸 수 없어 id 페이지를 먼저 뗀다. 코스 본문·아이템 엔티티를 로딩하지 않고 id 스칼라만 읽는다.
+     */
+    @Override
+    public Set<String> findRecentSpotContentIds(Long userId, int courseLimit) {
+        if (courseLimit <= 0) return Set.of();
+        List<Long> ids = jpaRepository.findRecentIdsByUserId(userId,
+                PageRequest.of(0, courseLimit, toSort(CourseSort.LATEST)));
+        if (ids.isEmpty()) return Set.of();
+        return new HashSet<>(jpaRepository.findOriginalIdsByCourseIdIn(ids, CoursePlaceType.SPOT));
     }
 
     /**

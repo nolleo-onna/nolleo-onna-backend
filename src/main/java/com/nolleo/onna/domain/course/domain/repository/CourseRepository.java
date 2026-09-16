@@ -6,6 +6,7 @@ import com.nolleo.onna.domain.course.domain.model.vo.CourseSort;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface CourseRepository {
@@ -61,6 +62,12 @@ public interface CourseRepository {
     List<Course> findByPairId(UUID pairId);
 
     List<Course> findByUserId(Long userId);
+
+    /**
+     * 사용자의 최근 코스 courseLimit개에 담겼던 SPOT contentId 집합 — 코스 생성 시 최근에 받은 스팟을 덜 뽑기 위한 이력.
+     * 삭제된 코스는 제외한다. 이력이 없으면 빈 집합.
+     */
+    Set<String> findRecentSpotContentIds(Long userId, int courseLimit);
 
     /**
      * 공개 코스 목록 — 정렬 기준(최신순 · 좋아요순 · 조회수순)으로 페이지 조회. 비공개·삭제된 코스는 제외한다.

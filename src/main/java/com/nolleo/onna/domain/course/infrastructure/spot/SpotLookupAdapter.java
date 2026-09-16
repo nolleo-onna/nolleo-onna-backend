@@ -84,7 +84,8 @@ public class SpotLookupAdapter implements SpotLookupPort {
                 category != null ? category.name() : null,
                 category != null ? category.getLabel() : null,
                 geo != null ? geo.longitude() : null,
-                geo != null ? geo.latitude() : null
+                geo != null ? geo.latitude() : null,
+                spot.getLclsSystm2()
         );
     }
 }
