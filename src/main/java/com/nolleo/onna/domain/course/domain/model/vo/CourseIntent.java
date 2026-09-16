@@ -11,7 +11,7 @@ import java.util.Optional;
  * 필드 정책:
  *   startArea      필수. 없으면 코스 생성 불가 → 되묻기. 기준점(anchor)이 찾아지면 그 좌표에 가장 가까운 지역으로 자동 채워진다
  *   nearbyAllowed  자동 추출 ("근처도 괜찮아") — 후보 스팟 검색 반경을 넓힌다 (CourseGenerationService)
- *   budget         선택. null = 무제한. 스냅샷으로 저장만 하고 생성 로직(후보 선택·가격 필터)에는 아직 반영하지 않는다
+ *   budget         선택. null = 제한없음. 생성 시 BudgetTier.fromAmount로 등급을 정해 식사·카페 슬롯 수와 1곳당 가격 상한에 쓴다
  *   companion      선택. null = 생략
  *   mood           선택. empty = 벡터 리랭킹 스킵
  *   slotHints      자동 추출. isEmpty = 기본 패턴

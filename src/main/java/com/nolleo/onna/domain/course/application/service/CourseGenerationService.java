@@ -1,12 +1,15 @@
 package com.nolleo.onna.domain.course.application.service;
 
 import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.course.application.dto.GenerationOptions;
+import com.nolleo.onna.domain.course.application.dto.GenerationResult;
 import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.port.CourseContentWriter;
 import com.nolleo.onna.domain.course.application.port.SpotLookupPort;
 import com.nolleo.onna.domain.course.application.port.SpotReranker;
 import com.nolleo.onna.domain.course.domain.exception.CourseErrorCode;
 import com.nolleo.onna.domain.course.domain.model.Course;
+import com.nolleo.onna.domain.course.domain.model.vo.BudgetTier;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseIntent;
 import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaces;
 import com.nolleo.onna.domain.course.domain.model.vo.GeoPoint;
@@ -29,29 +32,29 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * SPOT 기반 AI 코스 생성 파이프라인 조율.
+ * SPOT 기반 코스 생성 파이프라인 조율 — 챗봇(AI)과 폼(ALGORITHM)이 공유한다. 경로별 차이는 GenerationOptions로 받는다.
  *
  * 순서:
  *   1. 검색 중심 좌표 확정 — 기준점("X 근처")을 찾았으면 그 좌표, 아니면 시작 지역 중심 (CourseIntent.center)
- *   2. SlotHints → SlotPlan (카테고리별 목표 개수)
+ *   2. 예산 등급 + SlotHints → SlotPlan (카테고리별 목표 개수). 예산 등급이 기본 슬롯을, 사용자 힌트가 덮어쓴다
  *   2-1. 사용자가 이름으로 지정한 스팟 — 확인 단계에서 못 끝낸 매칭을 마저 하고(SpotPinResolver), contentId로 일괄 조회한다.
- *        포함 스팟은 미리 선택에 담아 해당 카테고리 슬롯을 차지하고, 제외 스팟은 후보 풀에서 걸러낸다. 못 찾은 지정은 건너뛴다
+ *        포함 스팟은 미리 선택에 담아 해당 카테고리 슬롯을 차지하고(예산과 무관), 제외 스팟은 후보 풀에서 걸러낸다. 못 찾은 지정은 건너뛴다
  *   3. 카테고리 그룹별 후보 풀 조회 (SpotLookupPort) — 검색 반경(nearbyAllowed) 안에서 가까운 순
  *      상위 CANDIDATE_POOL_SIZE개. 정렬·절단은 DB(PostGIS KNN)가 끝내므로 여기서 다시 정렬하지 않는다.
- *   4. mood/companion이 있으면 벡터 유사도로 후보 풀 재정렬, 없으면 거리순 그대로 상위 N개 선택.
+ *   3-1. 식사·카페(FD) 풀에는 예산 등급의 1곳당 상한으로 가격 필터를 건다 — 가격 정보 없는 스팟은 통과,
+ *        필터 후 후보가 슬롯보다 적으면 필터를 풀고 채운다 (GenerationResult.budgetFilterRelaxed)
+ *   4. 리랭킹을 쓰는 경로에서 mood/companion이 있으면 벡터 유사도로 후보 풀 재정렬, 아니면 거리순 그대로 상위 N개 선택.
  *      쿼리 텍스트는 그룹마다 같으므로 임베딩(SpotReranker.prepare)은 요청당 1회만 한다.
  *   5. 최근접 탐욕 순서로 코스 조립 (CourseAssembler)
  *   6. FD 카테고리 아이템만 가격 조회 (SpotLookupPort)
- *   7. 조립 완료 후 제목·소개 생성 (CourseContentWriter)
+ *   7. 제목·소개 — 챗봇은 조립 후 AI(CourseContentWriter), 폼은 템플릿 제목 + 소개 없음
  *   8. 저장
- *
- * intent.budget은 스냅샷으로 저장만 하고 후보 선택·가격 필터에는 아직 반영하지 않는다 (#71에서 미반영으로 결정).
  *
  * Spot 컨텍스트에는 SpotLookupPort/SpotReranker 포트로만 접근한다 —
  * Spot의 도메인 모델(Spot/SpotCategory/GeoCoordinate)을 이 클래스가 직접 알지 않는다.
  *
  * 트랜잭션 정책:
- *   이 클래스에는 트랜잭션을 걸지 않는다. 4·7단계에서 외부 AI API를 호출하므로
+ *   이 클래스에는 트랜잭션을 걸지 않는다. 4·7단계에서 외부 AI API를 호출할 수 있으므로
  *   전체를 트랜잭션으로 묶으면 응답을 기다리는 수 초 동안 DB 커넥션을 점유해
  *   동시 요청 몇 건만으로도 커넥션 풀이 고갈된다.
  *   3·6단계 조회는 각각 독립적이라 하나의 트랜잭션이 필요하지 않고,
@@ -65,7 +68,7 @@ public class CourseGenerationService {
 
     private static final List<String> ATTRACTION_CATEGORIES = List.of("NA", "HS", "VE");
     private static final List<String> ACTIVITY_CATEGORIES = List.of("EX", "LS");
-    private static final String FOOD_CATEGORY = "FD";
+    private static final List<String> FOOD_CATEGORIES = List.of("FD");
     /** 그룹당 후보 풀 크기 — DB가 가까운 순으로 이만큼만 잘라서 준다 */
     private static final int CANDIDATE_POOL_SIZE = 20;
 
@@ -81,7 +84,12 @@ public class CourseGenerationService {
     private final CourseRepository courseRepository;
     private final SpotPinResolver spotPinResolver;
 
+    /** 챗봇 경로 — 기존 호출부 호환 */
     public Course generate(Long userId, CourseIntent rawIntent, String createdBy) {
+        return generate(userId, rawIntent, GenerationOptions.aiChat()).course();
+    }
+
+    public GenerationResult generate(Long userId, CourseIntent rawIntent, GenerationOptions options) {
         // 검색 중심 — 기준점("X 근처")을 찾았으면 그 좌표, 아니면 시작 지역 중심
         GeoPoint center = rawIntent.center()
                 .orElseThrow(() -> new BusinessException(CourseErrorCode.UNKNOWN_START_AREA));
@@ -92,16 +100,17 @@ public class CourseGenerationService {
         // 매칭 결과가 들어간 intent를 스냅샷으로 저장해 어떤 스팟으로 이해했는지 재현할 수 있게 한다
         CourseIntent intent = spotPinResolver.resolve(rawIntent);
 
-        SlotPlan plan = SlotPlanner.plan(intent.slotHints());
+        BudgetTier budget = BudgetTier.fromAmount(intent.budget());
+        SlotPlan plan = SlotPlanner.plan(intent.slotHints(), budget);
         double radiusM = intent.nearbyAllowed() ? NEARBY_SEARCH_RADIUS_M : SEARCH_RADIUS_M;
 
         // 무드·동행 쿼리는 그룹마다 같으므로 임베딩은 여기서 한 번만 한다 — 그룹마다 하면 같은 텍스트로 API를 3번 부른다
-        String queryText = buildRerankQueryText(intent);
+        String queryText = options.useRerank() ? buildRerankQueryText(intent) : null;
         SpotReranker.Ranker ranker = queryText != null ? spotReranker.prepare(queryText) : null;
 
         // 사용자가 이름으로 지정한 스팟 — 포함은 후보 선택 전에 미리 담고, 제외는 후보 풀에서 걸러낸다.
         // 매칭된 pin은 contentId로 일괄 조회한다. 끝내 못 찾은 지정은 로그만 남기고 건너뛴다(코스 생성은 계속) —
-        // 사용자에게는 확인 단계에서 이미 알렸다.
+        // 사용자에게는 확인 단계(챗봇) 또는 응답(폼)에서 알린다.
         Map<String, SpotCandidate> pinned = lookupPinned(intent.includeSpots(), "포함");
         Set<String> excludedIds = lookupPinned(intent.excludeSpots(), "제외").keySet();
 
@@ -111,8 +120,8 @@ public class CourseGenerationService {
                 .forEach(spot -> selected.put(spot.contentId(), spot));
 
         // 지정 스팟은 해당 카테고리 그룹의 슬롯을 차지한다 — "관광지 1곳"에 광안리해수욕장을 넣었으면 관광지는 더 고르지 않는다
-        selectGroup(List.of(FOOD_CATEGORY), plan.foodCount() + plan.cafeCount() - countIn(selected, List.of(FOOD_CATEGORY)),
-                lat, lon, radiusM, ranker, excludedIds, selected);
+        boolean budgetFilterRelaxed = selectFoodGroup(plan.foodCount() + plan.cafeCount() - countIn(selected, FOOD_CATEGORIES),
+                budget, lat, lon, radiusM, ranker, excludedIds, selected);
         selectGroup(ATTRACTION_CATEGORIES, plan.attractionCount() - countIn(selected, ATTRACTION_CATEGORIES),
                 lat, lon, radiusM, ranker, excludedIds, selected);
         selectGroup(ACTIVITY_CATEGORIES, plan.activityCount() - countIn(selected, ACTIVITY_CATEGORIES),
@@ -139,20 +148,24 @@ public class CourseGenerationService {
                 .toList();
         Map<String, Integer> priceByContentId = spotLookupPort.findFoodPrices(foodContentIds);
 
-        Course course = Course.createByAi(userId, UUID.randomUUID(), intent, createdBy);
+        Course course = options.usesAiContent()
+                ? Course.createByAi(userId, UUID.randomUUID(), intent, options.createdBy())
+                : Course.createByForm(userId, UUID.randomUUID(), options.templateTitle(), intent, options.createdBy());
         for (CourseAssembler.AssembledItem item : assembled) {
             SpotCandidate spot = selected.get(item.waypoint().refId());
             Integer expectedCost = spot.isFood() ? priceByContentId.get(spot.contentId()) : null;
             course.addItem(PlaceRef.spot(spot.contentId()), expectedCost, item.distanceFromPrevM());
         }
 
-        List<String> spotTitlesInOrder = assembled.stream()
-                .map(item -> selected.get(item.waypoint().refId()).title())
-                .toList();
-        CourseContentWriter.CourseContent content = courseContentWriter.generate(intent, spotTitlesInOrder);
-        course.applyAiContent(content.title(), content.description());
+        if (options.usesAiContent()) {
+            List<String> spotTitlesInOrder = assembled.stream()
+                    .map(item -> selected.get(item.waypoint().refId()).title())
+                    .toList();
+            CourseContentWriter.CourseContent content = courseContentWriter.generate(intent, spotTitlesInOrder);
+            course.applyAiContent(content.title(), content.description());
+        }
 
-        return courseRepository.save(course);
+        return new GenerationResult(courseRepository.save(course), budgetFilterRelaxed);
     }
 
     /** 코스 조립에 필요한 좌표만 추출한다. 좌표가 없으면 null. */
@@ -210,6 +223,41 @@ public class CourseGenerationService {
     }
 
     /**
+     * 식사·카페(FD) 그룹 — 예산 등급에 1곳당 상한이 있으면 가격 필터를 건 뒤 고른다.
+     * 가격 정보가 없는 스팟은 통과시키고, 필터 후 후보가 count보다 적으면 필터를 풀고 채운다.
+     *
+     * @return 필터를 풀었는지 (응답에서 "예산 안에서 다 채우지 못했다"고 알리기 위해)
+     */
+    private boolean selectFoodGroup(int count, BudgetTier budget, double lat, double lon, double radiusM,
+                                    SpotReranker.Ranker ranker, Set<String> excludedIds,
+                                    Map<String, SpotCandidate> selected) {
+        if (count <= 0) return false;
+
+        List<SpotCandidate> pool = fetchPool(FOOD_CATEGORIES, lat, lon, radiusM, excludedIds, selected);
+        if (pool.isEmpty()) return false;
+
+        boolean relaxed = false;
+        if (budget.hasPriceCap()) {
+            Map<String, Integer> priceById = spotLookupPort.findFoodPrices(pool.stream().map(SpotCandidate::contentId).toList());
+            List<SpotCandidate> affordable = pool.stream()
+                    .filter(spot -> {
+                        Integer price = priceById.get(spot.contentId());
+                        return price == null || price <= budget.perItemCap();
+                    })
+                    .toList();
+            if (affordable.size() >= count) {
+                pool = affordable;
+            } else {
+                relaxed = true;
+                log.info("예산 필터 해제 — 상한 {}원 이하 후보 {}개 < 필요 {}개", budget.perItemCap(), affordable.size(), count);
+            }
+        }
+
+        choose(pool, count, ranker, selected);
+        return relaxed;
+    }
+
+    /**
      * 카테고리 그룹의 후보 풀을 조회해 count개를 선택해 selected에 누적한다.
      * 그룹의 카테고리를 한 쿼리로 묶어 조회하므로 풀은 그룹 전체 기준 거리순이고, DB가 이미
      * CANDIDATE_POOL_SIZE개로 잘라서 주기 때문에 여기서는 정렬도 절단도 하지 않는다.
@@ -218,17 +266,27 @@ public class CourseGenerationService {
                              SpotReranker.Ranker ranker, Set<String> excludedIds,
                              Map<String, SpotCandidate> selected) {
         if (count <= 0) return;
+        List<SpotCandidate> pool = fetchPool(categories, lat, lon, radiusM, excludedIds, selected);
+        if (pool.isEmpty()) return;
+        choose(pool, count, ranker, selected);
+    }
 
-        // 한 스팟은 카테고리가 하나라 그룹 간 중복은 원칙적으로 없지만, 데이터 이상에 대비해 걸러 둔다.
-        // 사용자가 빼달라고 한 스팟은 후보 풀에서 제거한다 (풀은 DB가 20개로 잘라 주므로 제외만큼 후보가 줄 수 있다)
-        List<SpotCandidate> pool = spotLookupPort
+    /**
+     * 한 스팟은 카테고리가 하나라 그룹 간 중복은 원칙적으로 없지만, 데이터 이상에 대비해 걸러 둔다.
+     * 사용자가 빼달라고 한 스팟은 후보 풀에서 제거한다 (풀은 DB가 20개로 잘라 주므로 제외만큼 후보가 줄 수 있다)
+     */
+    private List<SpotCandidate> fetchPool(List<String> categories, double lat, double lon, double radiusM,
+                                          Set<String> excludedIds, Map<String, SpotCandidate> selected) {
+        return spotLookupPort
                 .findNearbyByCategories(categories, lat, lon, radiusM, CANDIDATE_POOL_SIZE).stream()
                 .filter(spot -> !selected.containsKey(spot.contentId()))
                 .filter(spot -> !excludedIds.contains(spot.contentId()))
                 .filter(SpotCandidate::hasCoordinate)
                 .toList();
-        if (pool.isEmpty()) return;
+    }
 
+    private static void choose(List<SpotCandidate> pool, int count, SpotReranker.Ranker ranker,
+                               Map<String, SpotCandidate> selected) {
         List<SpotCandidate> ordered = ranker != null ? rerank(pool, ranker) : pool;
         ordered.stream().limit(count).forEach(spot -> selected.put(spot.contentId(), spot));
     }
