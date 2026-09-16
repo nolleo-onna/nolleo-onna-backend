@@ -18,8 +18,16 @@ public record SpotCandidate(
         /** 경도 (WGS84) */
         BigDecimal mapX,
         /** 위도 (WGS84) */
-        BigDecimal mapY
+        BigDecimal mapY,
+        /** 세부 분류 코드 (lcls_systm_2) — 후보 선택 시 같은 세부 분류(해수욕장만 3곳 등)가 몰리지 않게 하는 데 쓴다. 없으면 null */
+        String subCategoryCode
 ) {
+    /** 세부 분류 없이 만드는 편의 생성자 — 세부 분류가 필요 없는 조회·편집 경로와 테스트용 */
+    public SpotCandidate(String contentId, String title, String firstImage, String categoryCode, String categoryLabel,
+                         BigDecimal mapX, BigDecimal mapY) {
+        this(contentId, title, firstImage, categoryCode, categoryLabel, mapX, mapY, null);
+    }
+
     public boolean hasCoordinate() {
         return mapX != null && mapY != null;
     }

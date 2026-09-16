@@ -18,6 +18,7 @@ import com.nolleo.onna.domain.course.domain.model.vo.SlotPlan;
 import com.nolleo.onna.domain.course.domain.model.vo.SpotPin;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.domain.service.CourseAssembler;
+import com.nolleo.onna.domain.course.domain.service.DiverseSpotSelector;
 import com.nolleo.onna.domain.course.domain.service.SlotPlanner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,12 +40,15 @@ import java.util.UUID;
  *   2. 예산 등급 + SlotHints → SlotPlan (카테고리별 목표 개수). 예산 등급이 기본 슬롯을, 사용자 힌트가 덮어쓴다
  *   2-1. 사용자가 이름으로 지정한 스팟 — 확인 단계에서 못 끝낸 매칭을 마저 하고(SpotPinResolver), contentId로 일괄 조회한다.
  *        포함 스팟은 미리 선택에 담아 해당 카테고리 슬롯을 차지하고(예산과 무관), 제외 스팟은 후보 풀에서 걸러낸다. 못 찾은 지정은 건너뛴다
+ *   2-2. 최근 이력 — 사용자의 최근 코스에 담겼던 스팟 contentId를 한 번 조회해 둔다 (선택 시 감점용)
  *   3. 카테고리 그룹별 후보 풀 조회 (SpotLookupPort) — 검색 반경(nearbyAllowed) 안에서 가까운 순
  *      상위 CANDIDATE_POOL_SIZE개. 정렬·절단은 DB(PostGIS KNN)가 끝내므로 여기서 다시 정렬하지 않는다.
  *   3-1. 식사·카페(FD) 풀에는 예산 등급의 1곳당 상한으로 가격 필터를 건다 — 가격 정보 없는 스팟은 통과,
  *        필터 후 후보가 슬롯보다 적으면 필터를 풀고 채운다 (GenerationResult.budgetFilterRelaxed)
- *   4. 리랭킹을 쓰는 경로에서 mood/companion이 있으면 벡터 유사도로 후보 풀 재정렬, 아니면 거리순 그대로 상위 N개 선택.
+ *   4. 순위 결정 — 리랭킹을 쓰는 경로에서 mood/companion이 있으면 벡터 유사도 순, 아니면 거리순.
  *      쿼리 텍스트는 그룹마다 같으므로 임베딩(SpotReranker.prepare)은 요청당 1회만 한다.
+ *   4-1. 순위 풀에서 DiverseSpotSelector로 N개 선택 — 앞에서 자르지 않고 순위 가중 랜덤 샘플링 + 세부 분류 중복 제한 +
+ *        최근 이력 감점. 같은 입력(지역·예산)이라도 매번 다른 조합이 나온다.
  *   5. 최근접 탐욕 순서로 코스 조립 (CourseAssembler)
  *   6. FD 카테고리 아이템만 가격 조회 (SpotLookupPort)
  *   7. 제목·소개 — 챗봇은 조립 후 AI(CourseContentWriter), 폼은 템플릿 제목 + 소개 없음
@@ -69,8 +73,14 @@ public class CourseGenerationService {
     private static final List<String> ATTRACTION_CATEGORIES = List.of("NA", "HS", "VE");
     private static final List<String> ACTIVITY_CATEGORIES = List.of("EX", "LS");
     private static final List<String> FOOD_CATEGORIES = List.of("FD");
-    /** 그룹당 후보 풀 크기 — DB가 가까운 순으로 이만큼만 잘라서 준다 */
-    private static final int CANDIDATE_POOL_SIZE = 20;
+    /**
+     * 그룹당 후보 풀 크기 — DB가 가까운 순으로 이만큼만 잘라서 준다.
+     * 샘플링으로 고르므로 20보다 넓게 잡는다 — 40위의 가중치는 1위의 약 0.7%라 그 뒤는 사실상 뽑히지 않는다.
+     */
+    static final int CANDIDATE_POOL_SIZE = 40;
+
+    /** 최근 이력으로 볼 코스 수 — 이 안에 담겼던 스팟은 선택 가중치가 낮아진다 */
+    static final int RECENT_HISTORY_COURSES = 5;
 
     /** 후보 검색 반경(미터) — 시작 지역 중심 기준. 지역명만 말하면 그 지역 안에서 고른다 */
     static final double SEARCH_RADIUS_M = 5_000;
@@ -83,6 +93,7 @@ public class CourseGenerationService {
     private final CourseContentWriter courseContentWriter;
     private final CourseRepository courseRepository;
     private final SpotPinResolver spotPinResolver;
+    private final DiverseSpotSelector spotSelector;
 
     /** 챗봇 경로 — 기존 호출부 호환 */
     public Course generate(Long userId, CourseIntent rawIntent, String createdBy) {
@@ -119,13 +130,16 @@ public class CourseGenerationService {
                 .filter(spot -> !excludedIds.contains(spot.contentId()))
                 .forEach(spot -> selected.put(spot.contentId(), spot));
 
+        // 최근 코스에 담겼던 스팟 — 제외하지 않고 선택 가중치만 낮춘다 (후보가 적은 지역에서 코스가 비지 않게)
+        Set<String> recentSpotIds = courseRepository.findRecentSpotContentIds(userId, RECENT_HISTORY_COURSES);
+
         // 지정 스팟은 해당 카테고리 그룹의 슬롯을 차지한다 — "관광지 1곳"에 광안리해수욕장을 넣었으면 관광지는 더 고르지 않는다
         boolean budgetFilterRelaxed = selectFoodGroup(plan.foodCount() + plan.cafeCount() - countIn(selected, FOOD_CATEGORIES),
-                budget, lat, lon, radiusM, ranker, excludedIds, selected);
+                budget, lat, lon, radiusM, ranker, excludedIds, recentSpotIds, selected);
         selectGroup(ATTRACTION_CATEGORIES, plan.attractionCount() - countIn(selected, ATTRACTION_CATEGORIES),
-                lat, lon, radiusM, ranker, excludedIds, selected);
+                lat, lon, radiusM, ranker, excludedIds, recentSpotIds, selected);
         selectGroup(ACTIVITY_CATEGORIES, plan.activityCount() - countIn(selected, ACTIVITY_CATEGORIES),
-                lat, lon, radiusM, ranker, excludedIds, selected);
+                lat, lon, radiusM, ranker, excludedIds, recentSpotIds, selected);
 
         // SpotCandidate → Course 컨텍스트의 Waypoint VO 변환 (좌표 없는 스팟은 제외)
         List<CourseAssembler.Waypoint> waypoints = selected.values().stream()
@@ -229,7 +243,7 @@ public class CourseGenerationService {
      * @return 필터를 풀었는지 (응답에서 "예산 안에서 다 채우지 못했다"고 알리기 위해)
      */
     private boolean selectFoodGroup(int count, BudgetTier budget, double lat, double lon, double radiusM,
-                                    SpotReranker.Ranker ranker, Set<String> excludedIds,
+                                    SpotReranker.Ranker ranker, Set<String> excludedIds, Set<String> recentSpotIds,
                                     Map<String, SpotCandidate> selected) {
         if (count <= 0) return false;
 
@@ -253,7 +267,7 @@ public class CourseGenerationService {
             }
         }
 
-        choose(pool, count, ranker, selected);
+        choose(pool, count, ranker, recentSpotIds, selected);
         return relaxed;
     }
 
@@ -263,12 +277,12 @@ public class CourseGenerationService {
      * CANDIDATE_POOL_SIZE개로 잘라서 주기 때문에 여기서는 정렬도 절단도 하지 않는다.
      */
     private void selectGroup(List<String> categories, int count, double lat, double lon, double radiusM,
-                             SpotReranker.Ranker ranker, Set<String> excludedIds,
+                             SpotReranker.Ranker ranker, Set<String> excludedIds, Set<String> recentSpotIds,
                              Map<String, SpotCandidate> selected) {
         if (count <= 0) return;
         List<SpotCandidate> pool = fetchPool(categories, lat, lon, radiusM, excludedIds, selected);
         if (pool.isEmpty()) return;
-        choose(pool, count, ranker, selected);
+        choose(pool, count, ranker, recentSpotIds, selected);
     }
 
     /**
@@ -285,10 +299,16 @@ public class CourseGenerationService {
                 .toList();
     }
 
-    private static void choose(List<SpotCandidate> pool, int count, SpotReranker.Ranker ranker,
-                               Map<String, SpotCandidate> selected) {
-        List<SpotCandidate> ordered = ranker != null ? rerank(pool, ranker) : pool;
-        ordered.stream().limit(count).forEach(spot -> selected.put(spot.contentId(), spot));
+    /**
+     * 순위 풀(리랭킹이 있으면 그 순서, 없으면 거리순)에서 count개를 고른다.
+     * 앞에서 자르지 않고 DiverseSpotSelector가 순위 가중 샘플링·세부 분류 제한·최근 이력 감점으로 뽑는다 —
+     * 상위 후보가 더 자주 나오지만 같은 입력에 항상 같은 조합이 나오지는 않는다.
+     */
+    private void choose(List<SpotCandidate> pool, int count, SpotReranker.Ranker ranker,
+                        Set<String> recentSpotIds, Map<String, SpotCandidate> selected) {
+        List<SpotCandidate> ranked = ranker != null ? rerank(pool, ranker) : pool;
+        spotSelector.select(ranked, count, SpotCandidate::contentId, SpotCandidate::subCategoryCode, recentSpotIds)
+                .forEach(spot -> selected.put(spot.contentId(), spot));
     }
 
     /**

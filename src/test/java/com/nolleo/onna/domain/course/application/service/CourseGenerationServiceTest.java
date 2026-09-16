@@ -19,6 +19,7 @@ import com.nolleo.onna.domain.course.domain.model.vo.SpotPin;
 import com.nolleo.onna.domain.course.domain.repository.CourseRepository;
 import com.nolleo.onna.domain.course.domain.model.vo.CourseAnchor;
 import com.nolleo.onna.domain.course.domain.model.vo.GeoPoint;
+import com.nolleo.onna.domain.course.domain.service.DiverseSpotSelector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -28,9 +29,14 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
+import java.util.Set;
+import java.util.random.RandomGenerator;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -57,18 +63,28 @@ class CourseGenerationServiceTest {
 
     private CourseGenerationService service;
 
+    /**
+     * 난수가 항상 0인 생성기 — 선택기가 가중치와 무관하게 남은 후보 중 최상위를 뽑는다.
+     * 기존 테스트가 "순위 1위가 뽑힌다"를 전제로 쓰므로 기본 서비스는 이것으로 만든다. 무작위성 자체는 별도 테스트에서 시드로 본다.
+     */
+    private static final RandomGenerator ALWAYS_FIRST = () -> 0L;
+
     @BeforeEach
     void setUp() {
-        // SpotPinResolver는 실제 객체 — 같은 spotLookupPort 목을 쓰므로 이름 검색 스텁은 한 곳에서 관리된다
-        service = new CourseGenerationService(spotLookupPort, spotReranker, courseContentWriter, courseRepository,
-                new SpotPinResolver(spotLookupPort));
+        service = serviceWith(ALWAYS_FIRST);
+    }
+
+    /** SpotPinResolver는 실제 객체 — 같은 spotLookupPort 목을 쓰므로 이름 검색 스텁은 한 곳에서 관리된다 */
+    private CourseGenerationService serviceWith(RandomGenerator random) {
+        return new CourseGenerationService(spotLookupPort, spotReranker, courseContentWriter, courseRepository,
+                new SpotPinResolver(spotLookupPort), new DiverseSpotSelector(random));
     }
 
     // 픽스처 — 광안리 중심(35.1531, 129.1187) 기준. SpotCandidate는 mapX=경도, mapY=위도.
 
     private static final double GWANGAN_LAT = 35.1531;
     private static final double GWANGAN_LON = 129.1187;
-    private static final int POOL_SIZE = 20;
+    private static final int POOL_SIZE = CourseGenerationService.CANDIDATE_POOL_SIZE;
 
     /** 서비스가 그룹별로 묶어 조회하는 카테고리 목록 — 포트 호출 인자와 정확히 일치해야 한다 */
     private static final List<String> FOOD_GROUP = List.of("FD");
@@ -318,7 +334,8 @@ class CourseGenerationServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasFieldOrPropertyWithValue("errorCode", CourseErrorCode.NO_SPOT_CANDIDATES);
 
-        verifyNoInteractions(courseRepository, courseContentWriter);
+        verify(courseRepository, never()).save(any());
+        verifyNoInteractions(courseContentWriter);
     }
 
     @Test
@@ -624,5 +641,124 @@ class CourseGenerationServiceTest {
         assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food1"));
         assertThat(saved.getTotalCost()).isEqualTo(50000);
         verify(spotLookupPort, never()).findNearbyByCategories(eq(FOOD_GROUP), anyDouble(), anyDouble(), anyDouble(), anyInt());
+    }
+
+    // ── 다양성 (샘플링·세부 분류·최근 이력) ────────────────────────────────────
+
+    /** 난수가 항상 1에 가까운 생성기 — 선택기가 남은 후보 중 마지막(최하위)을 뽑는다 */
+    private static final RandomGenerator ALWAYS_LAST = () -> -1L;
+
+    private static List<SpotCandidate> tenAttractions() {
+        return java.util.stream.IntStream.range(0, 10)
+                .mapToObj(i -> spot("na" + i, "NA", 35.1540 + i * 0.001, 129.1190))
+                .toList();
+    }
+
+    @Test
+    @DisplayName("폼 모드도 같은 입력에서 시드가 다르면 다른 스팟 조합이 나온다 — 앞에서 count개를 자르지 않는다")
+    void generate_form_variesAcrossSeeds() {
+        // given — 관광지 풀 10곳, 3곳 고름. 시드 20개로 돌려 조합이 하나뿐이지 않은지 본다
+        stubAttractionPool(tenAttractions());
+        given(spotLookupPort.findFoodPrices(List.of())).willReturn(Map.of());
+        stubSaveReturnsArgument();
+        CourseIntent intent = new CourseIntent("광안리", false, null, null, List.of(), new SlotHints(0, 0, 3, 0), false);
+
+        // when
+        Set<Set<PlaceRef>> combos = new HashSet<>();
+        for (long seed = 0; seed < 20; seed++) {
+            Course saved = serviceWith(new Random(seed))
+                    .generate(1L, intent, GenerationOptions.form("광안리 중심 코스")).course();
+            assertThat(saved.getItems()).hasSize(3);
+            combos.add(saved.getItems().stream().map(CourseItem::getPlaceRef).collect(Collectors.toSet()));
+        }
+
+        // then
+        assertThat(combos.size()).isGreaterThan(1);
+    }
+
+    @Test
+    @DisplayName("예산 필터는 샘플링 전에 걸린다 — 난수가 어떻든 상한을 넘는 식당은 뽑히지 않는다")
+    void generate_appliesBudgetCap_beforeSampling() {
+        // given — 3만원 등급(상한 12,000원). 풀 [food1 15,000 · food2 8,000 · food3 가격 없음], 식사 1곳.
+        //         ALWAYS_LAST는 남은 후보 중 마지막을 뽑으므로 필터가 없다면 food1이 아니라도 마지막 후보가 뽑힌다
+        SpotCandidate food3 = spot("food3", "FD", 35.1600, 129.1300);
+        stubFoodPool(List.of(FOOD_NEAR, FOOD_FAR, food3));
+        given(spotLookupPort.findFoodPrices(List.of("food1", "food2", "food3"))).willReturn(Map.of("food1", 15000, "food2", 8000));
+        given(spotLookupPort.findFoodPrices(List.of("food3"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = serviceWith(ALWAYS_LAST)
+                .generate(1L, intentWithBudget(30000, new SlotHints(1, 0, 0, 0)), "AI_CHAT");
+
+        // then — 상한 안 후보 [food2, food3] 중 마지막인 food3. food1은 후보에서 빠져 있다
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food3"));
+    }
+
+    @Test
+    @DisplayName("같은 세부 분류(lcls_systm_2)는 1곳까지만 먼저 고른다 — 관광지 3곳이 해수욕장 3개로 채워지지 않는다")
+    void generate_limitsSameSubCategory() {
+        // given — 거리순 [해수욕장A, 해수욕장B, 공원, 해수욕장C], 관광지 2곳. 최상위부터 고르되 같은 세부 분류는 건너뛴다
+        SpotCandidate beachA = new SpotCandidate("beachA", "해수욕장A", null, "NA", "NA",
+                BigDecimal.valueOf(129.1190), BigDecimal.valueOf(35.1540), "NA01");
+        SpotCandidate beachB = new SpotCandidate("beachB", "해수욕장B", null, "NA", "NA",
+                BigDecimal.valueOf(129.1191), BigDecimal.valueOf(35.1541), "NA01");
+        SpotCandidate park = new SpotCandidate("park", "공원", null, "NA", "NA",
+                BigDecimal.valueOf(129.1192), BigDecimal.valueOf(35.1542), "NA02");
+        SpotCandidate beachC = new SpotCandidate("beachC", "해수욕장C", null, "NA", "NA",
+                BigDecimal.valueOf(129.1193), BigDecimal.valueOf(35.1543), "NA01");
+        stubAttractionPool(List.of(beachA, beachB, park, beachC));
+        given(spotLookupPort.findFoodPrices(List.of())).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intent(0, 2, List.of(), null), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef)
+                .containsExactlyInAnyOrder(PlaceRef.spot("beachA"), PlaceRef.spot("park"));
+    }
+
+    @Test
+    @DisplayName("최근 코스에 담겼던 스팟은 이력을 userId로 1회 조회해 감점한다 — 감점 때문에 2위가 1위를 이긴다")
+    void generate_penalizesRecentlyUsedSpots() {
+        // given — 거리순 [food1(최근 이력), food2], 식사 1곳. 난수 0.5:
+        //   감점 없으면 가중치 [1, 0.88] → r = 0.94 → food1. 감점 후 [0.2, 0.88] → r = 0.54 → food2
+        RandomGenerator half = () -> Long.MIN_VALUE; // nextDouble() == 0.5
+        given(courseRepository.findRecentSpotContentIds(1L, CourseGenerationService.RECENT_HISTORY_COURSES))
+                .willReturn(Set.of("food1"));
+        stubFoodPool(List.of(FOOD_NEAR, FOOD_FAR));
+        given(spotLookupPort.findFoodPrices(List.of("food2"))).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = serviceWith(half).generate(1L, intent(1, 0, List.of(), null), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food2"));
+        verify(courseRepository, times(1)).findRecentSpotContentIds(1L, CourseGenerationService.RECENT_HISTORY_COURSES);
+    }
+
+    @Test
+    @DisplayName("꼭 포함하는 스팟은 샘플링과 무관하게 항상 담긴다")
+    void generate_pinnedSpot_alwaysIncluded_regardlessOfSampling() {
+        // given — 관광지 3곳 중 1곳은 지정(beach). 나머지 2곳은 풀 10개에서 샘플링
+        CourseIntent intent = new CourseIntent("광안리", false, null, null, List.of(), new SlotHints(0, 0, 3, 0), false,
+                List.of(new SpotPin("광안리해수욕장", "beach", "광안리해수욕장")), List.of());
+        given(spotLookupPort.findActiveByIds(List.of("beach"))).willReturn(Map.of("beach", BEACH));
+        stubAttractionPool(tenAttractions());
+        given(spotLookupPort.findFoodPrices(List.of())).willReturn(Map.of());
+        stubSaveReturnsArgument();
+
+        // when / then
+        for (long seed = 0; seed < 10; seed++) {
+            Course saved = serviceWith(new Random(seed))
+                    .generate(1L, intent, GenerationOptions.form("광안리 중심 코스")).course();
+            assertThat(saved.getItems()).hasSize(3)
+                    .extracting(CourseItem::getPlaceRef).contains(PlaceRef.spot("beach"));
+        }
     }
 }

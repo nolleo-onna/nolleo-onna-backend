@@ -1,5 +1,6 @@
 package com.nolleo.onna.domain.course.infrastructure.persistence.repository;
 
+import com.nolleo.onna.domain.course.domain.model.vo.CoursePlaceType;
 import com.nolleo.onna.domain.course.infrastructure.persistence.entity.CourseEntity;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -35,6 +36,26 @@ public interface CourseJpaRepository extends JpaRepository<CourseEntity, Long> {
 
     @EntityGraph(attributePaths = "items")
     List<CourseEntity> findByUserId(Long userId);
+
+    /**
+     * 사용자의 코스 id — 정렬·개수는 Pageable로 붙는다 (CourseRepositoryImpl이 최신순 courseLimit개로 호출).
+     * 삭제된 코스는 제외. 본문을 읽지 않는 id 스칼라 조회다.
+     */
+    @Query("""
+            SELECT c.id FROM CourseEntity c
+             WHERE c.userId = :userId
+               AND c.softDeleteAudit.deletedAt IS NULL
+            """)
+    List<Long> findRecentIdsByUserId(@Param("userId") Long userId, Pageable pageable);
+
+    /** 코스 id 목록에 담긴 아이템의 originalId(placeType별) — 중복은 DISTINCT로 접는다 */
+    @Query("""
+            SELECT DISTINCT i.originalId FROM CourseItemEntity i
+             WHERE i.course.id IN :courseIds
+               AND i.placeType = :placeType
+            """)
+    List<String> findOriginalIdsByCourseIdIn(@Param("courseIds") Collection<Long> courseIds,
+                                             @Param("placeType") CoursePlaceType placeType);
 
     /** 공유 토큰으로 공개 코스 조회 + 아이템 fetch — 비공개·소프트 삭제된 코스는 제외 */
     @EntityGraph(attributePaths = "items")

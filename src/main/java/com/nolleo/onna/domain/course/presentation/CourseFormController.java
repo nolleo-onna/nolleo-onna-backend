@@ -38,6 +38,8 @@ public class CourseFormController {
                       (광안리 선택 + 중구 축제 → applied.startArea="중구"). 못 찾으면 선택 지역 중심으로 만들고 unmatched.festival로 알린다.
                     - 제목은 "{지역} 중심 코스" 또는 "{축제명} 중심 코스" 템플릿이며 소개는 비어 있다. 편집 API로 바꿀 수 있다.
                     - 응답의 courses는 GET /courses/{pairId}와 같은 구조라 재조회 없이 바로 화면에 쓸 수 있다.
+                    - 후보 선택에 무작위성이 있어 같은 입력이라도 매번 다른 조합이 나올 수 있다 (가까운 곳이 더 자주 뽑히고,
+                      같은 세부 분류가 몰리지 않으며, 최근 코스에 담겼던 스팟은 덜 뽑힌다). "다시 만들기"는 같은 요청을 다시 보내면 된다.
                     - 지원하지 않는 지역이면 UNKNOWN_START_AREA(400), 반경 안에 스팟이 없으면 NO_SPOT_CANDIDATES(404).
                     """
     )
