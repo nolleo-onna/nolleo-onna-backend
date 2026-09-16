@@ -127,6 +127,19 @@ public class Course {
                 new ArrayList<>(), OffsetDateTime.now(), createdBy);
     }
 
+    /**
+     * 폼(ALGORITHM) 모드 코스 생성 — 코스 유형 없이 템플릿 제목만 받고 소개는 비워둔다(사용자가 편집으로 채운다).
+     * 제목은 편집 경로와 같은 상한(MAX_TITLE_LENGTH)으로 잘라 넣는다.
+     */
+    public static Course createByForm(Long userId, UUID pairId, String title, CourseIntent intent, String createdBy) {
+        validate(userId, intent);
+        String stripped = title == null ? "" : title.strip();
+        if (stripped.isEmpty()) throw new IllegalArgumentException("제목은 비어 있을 수 없습니다.");
+        return new Course(null, userId, pairId, GenerationMode.ALGORITHM, null,
+                truncate(stripped, MAX_TITLE_LENGTH), null, intent, null, ShareInfo.initial(),
+                new ArrayList<>(), OffsetDateTime.now(), createdBy);
+    }
+
     /** DB 조회값으로 도메인 객체 재구성 — Repository 구현체 전용 */
     public static Course restore(Long id, Long userId, UUID pairId,
                                            GenerationMode generationMode, CourseType courseType,

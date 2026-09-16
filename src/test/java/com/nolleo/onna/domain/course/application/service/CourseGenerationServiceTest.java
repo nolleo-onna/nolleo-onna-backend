@@ -1,6 +1,8 @@
 package com.nolleo.onna.domain.course.application.service;
 
 import com.nolleo.onna.common.exception.BusinessException;
+import com.nolleo.onna.domain.course.application.dto.GenerationOptions;
+import com.nolleo.onna.domain.course.application.dto.GenerationResult;
 import com.nolleo.onna.domain.course.application.dto.SpotCandidate;
 import com.nolleo.onna.domain.course.application.port.CourseContentWriter;
 import com.nolleo.onna.domain.course.application.port.CourseContentWriter.CourseContent;
@@ -518,5 +520,109 @@ class CourseGenerationServiceTest {
                 CourseGenerationService.SEARCH_RADIUS_M, POOL_SIZE);
         assertThat(saved.getItems()).hasSize(1);
         assertThat(saved.startPoint()).isEqualTo(venue);
+    }
+
+    // ── 폼 경로 옵션 ─────────────────────────────────────────────────────────
+
+    private static CourseIntent intentWithBudget(Integer budget, SlotHints hints) {
+        return new CourseIntent("광안리", false, budget, null, List.of(), hints, false);
+    }
+
+    @Test
+    @DisplayName("폼 옵션은 동행이 있어도 리랭킹을 타지 않고, Gemini 대신 템플릿 제목·빈 소개로 ALGORITHM 코스를 저장한다")
+    void generate_form_usesTemplateTitle_withoutAiCalls() {
+        // given — 동행이 있어 챗봇이라면 임베딩을 했을 intent
+        CourseIntent intent = new CourseIntent("광안리", false, null, "연인", List.of(), new SlotHints(1, 0, 0, 0), false);
+        stubFoodPool(List.of(FOOD_NEAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of());
+        stubSaveReturnsArgument();
+
+        // when
+        GenerationResult result = service.generate(1L, intent, GenerationOptions.form("광안리 중심 코스"));
+
+        // then
+        Course saved = result.course();
+        assertThat(saved.getGenerationMode()).isEqualTo(GenerationMode.ALGORITHM);
+        assertThat(saved.getTitle()).isEqualTo("광안리 중심 코스");
+        assertThat(saved.getDescription()).isNull();
+        assertThat(saved.getCreatedBy()).isEqualTo("FORM");
+        assertThat(result.budgetFilterRelaxed()).isFalse();
+        verifyNoInteractions(spotReranker, courseContentWriter);
+    }
+
+    // ── 예산 ─────────────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("예산 등급의 1곳 상한을 넘는 식사 후보는 거른다 — 가격 정보가 없는 후보는 통과")
+    void generate_appliesBudgetCap_toFoodPool() {
+        // given — 3만원 등급(상한 12,000원). 풀은 [food1 15,000원, food2 8,000원], 식사 1곳
+        stubFoodPool(List.of(FOOD_NEAR, FOOD_FAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1", "food2"))).willReturn(Map.of("food1", 15000, "food2", 8000));
+        given(spotLookupPort.findFoodPrices(List.of("food2"))).willReturn(Map.of("food2", 8000));
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        GenerationResult result = service.generate(1L, intentWithBudget(30000, new SlotHints(1, 0, 0, 0)), GenerationOptions.aiChat());
+
+        // then
+        assertThat(result.course().getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food2"));
+        assertThat(result.course().getTotalCost()).isEqualTo(8000);
+        assertThat(result.budgetFilterRelaxed()).isFalse();
+    }
+
+    @Test
+    @DisplayName("상한 안의 식사 후보가 슬롯보다 적으면 필터를 풀고 채우며 결과에 표시한다")
+    void generate_relaxesBudgetFilter_whenNotEnoughAffordable() {
+        // given — 3만원 등급, 풀 전부가 상한 초과
+        stubFoodPool(List.of(FOOD_NEAR, FOOD_FAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1", "food2"))).willReturn(Map.of("food1", 15000, "food2", 20000));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of("food1", 15000));
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        GenerationResult result = service.generate(1L, intentWithBudget(30000, new SlotHints(1, 0, 0, 0)), GenerationOptions.aiChat());
+
+        // then — 거리순 1위(food1)가 그대로 들어간다
+        assertThat(result.course().getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food1"));
+        assertThat(result.budgetFilterRelaxed()).isTrue();
+    }
+
+    @Test
+    @DisplayName("무지출 등급은 식사·카페 그룹을 조회조차 하지 않고 관광지만 담는다")
+    void generate_noneBudget_skipsFoodGroup() {
+        // given — 예산 0원, 슬롯 힌트 없음 → 등급 기본값(관광 4)
+        stubAttractionPool(List.of(NATURE));
+        given(spotLookupPort.findFoodPrices(List.of())).willReturn(Map.of());
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intentWithBudget(0, null), "AI_CHAT");
+
+        // then
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("nature1"));
+        verify(spotLookupPort, never()).findNearbyByCategories(eq(FOOD_GROUP), anyDouble(), anyDouble(), anyDouble(), anyInt());
+    }
+
+    @Test
+    @DisplayName("꼭 포함하는 스팟은 예산 상한과 무관하게 담긴다 — 사용자가 명시한 것이므로")
+    void generate_pinnedSpot_ignoresBudgetCap() {
+        // given — 1만원 등급(식사 1, 상한 10,000원)인데 50,000원짜리 식당을 지정
+        CourseIntent intent = new CourseIntent("광안리", false, 10000, null, List.of(), new SlotHints(null, null, 0, null), false,
+                List.of(new SpotPin("food1명", "food1", "food1명")), List.of());
+        given(spotLookupPort.findActiveByIds(List.of("food1"))).willReturn(Map.of("food1", FOOD_NEAR));
+        given(spotLookupPort.findFoodPrices(List.of("food1"))).willReturn(Map.of("food1", 50000));
+        stubContent();
+        stubSaveReturnsArgument();
+
+        // when
+        Course saved = service.generate(1L, intent, "AI_CHAT");
+
+        // then — 지정 식당이 식사 슬롯을 차지해 FD 풀은 조회하지 않고, 비용은 그대로 반영된다
+        assertThat(saved.getItems()).extracting(CourseItem::getPlaceRef).containsExactly(PlaceRef.spot("food1"));
+        assertThat(saved.getTotalCost()).isEqualTo(50000);
+        verify(spotLookupPort, never()).findNearbyByCategories(eq(FOOD_GROUP), anyDouble(), anyDouble(), anyDouble(), anyInt());
     }
 }

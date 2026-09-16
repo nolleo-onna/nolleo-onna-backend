@@ -22,8 +22,8 @@ import java.util.List;
  * 위치는 데이터에서만 온다. AI는 이름과 "근처"라는 관계만 뽑고, 어디쯤인지는 추측하지 않는다.
  * TitleMatch 규칙(정확 일치 또는 단일 결과)으로 확정될 때만 좌표를 채운다. "부산국제"처럼 부분 일치가 여럿이면
  * 못 찾은 것으로 두고 정확한 이름을 되묻는다 — 기준점은 하나여야 하고, 후보 선택으로 대화를 복잡하게 만들지 않는다.
- * 찾으면 기준점 좌표에 가장 가까운 지원 지역을 startArea로 채운다(사용자가 지역을 직접 말했으면 그대로 둔다) —
- * 검색 중심은 기준점 좌표가 되고, startArea는 조회·편집 등 기존 경로와의 호환용이다.
+ * 찾으면 기준점 좌표에 가장 가까운 지원 지역을 startArea로 채운다 — 사용자가 지역을 직접 말했더라도 덮어쓴다.
+ * 검색 중심은 기준점 좌표가 되고, startArea는 제목·조회·편집 등 기존 경로에서 쓰는 지역 표시다.
  * 못 찾으면 미해결 그대로 둔다 — 지역이 없으면 되묻기에서 "찾지 못했다"고 알리고, 지역이 있으면 지역 중심으로 진행한다.
  */
 @Service
@@ -106,11 +106,14 @@ public class CourseAnchorResolver {
         return stripped.equals(name.strip()) ? List.of(name.strip()) : List.of(name.strip(), stripped);
     }
 
-    /** 찾은 기준점을 intent에 넣고, 지역이 없으면 좌표에서 가장 가까운 지원 지역을 채운다 */
+    /**
+     * 찾은 기준점을 intent에 넣고, startArea를 기준점 좌표에서 가장 가까운 지원 지역으로 맞춘다 —
+     * 사용자가 지역을 직접 말했더라도 덮어쓴다. 검색 중심이 기준점 좌표이므로 지역 표시가 실제 스팟 위치와
+     * 어긋나면("광안리 코스"인데 중구 스팟만 담기는) 안 되기 때문이다. 폼·챗봇 공통 규칙.
+     */
     static CourseIntent settle(CourseIntent intent, CourseAnchor resolved) {
-        CourseIntent withAnchor = intent.withAnchor(resolved);
-        if (withAnchor.canGenerate()) return withAnchor;
-        return withAnchor.withStartArea(DistrictCenter.nearestTo(resolved.point()).getSigngu());
+        return intent.withAnchor(resolved)
+                .withStartArea(DistrictCenter.nearestTo(resolved.point()).getSigngu());
     }
 
     /** "10.14~10.16" / "10.14~" / null */
